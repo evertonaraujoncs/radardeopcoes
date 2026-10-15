@@ -12,7 +12,12 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
+import { Route as AuthenticatedAlertasRouteImport } from './routes/_authenticated/alertas'
+import { Route as AuthenticatedParametrosRouteImport } from './routes/_authenticated/parametros'
 import { Route as AuthenticatedRadarRouteImport } from './routes/_authenticated/radar'
+import { Route as AuthenticatedStatusRouteImport } from './routes/_authenticated/status'
+import { Route as AuthenticatedAtivoTickerRouteImport } from './routes/_authenticated/ativo.$ticker'
+import { Route as AuthenticatedSinalIdRouteImport } from './routes/_authenticated/sinal.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -28,35 +33,102 @@ const AuthRoute = AuthRouteImport.update({
   path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedAlertasRoute = AuthenticatedAlertasRouteImport.update({
+  id: '/alertas',
+  path: '/alertas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedParametrosRoute = AuthenticatedParametrosRouteImport.update({
+  id: '/parametros',
+  path: '/parametros',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedRadarRoute = AuthenticatedRadarRouteImport.update({
   id: '/radar',
   path: '/radar',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedStatusRoute = AuthenticatedStatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedAtivoTickerRoute =
+  AuthenticatedAtivoTickerRouteImport.update({
+    id: '/ativo/$ticker',
+    path: '/ativo/$ticker',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedSinalIdRoute = AuthenticatedSinalIdRouteImport.update({
+  id: '/sinal/$id',
+  path: '/sinal/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/alertas': typeof AuthenticatedAlertasRoute
+  '/parametros': typeof AuthenticatedParametrosRoute
   '/radar': typeof AuthenticatedRadarRoute
+  '/status': typeof AuthenticatedStatusRoute
+  '/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
+  '/sinal/$id': typeof AuthenticatedSinalIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
+  '/alertas': typeof AuthenticatedAlertasRoute
+  '/parametros': typeof AuthenticatedParametrosRoute
   '/radar': typeof AuthenticatedRadarRoute
+  '/status': typeof AuthenticatedStatusRoute
+  '/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
+  '/sinal/$id': typeof AuthenticatedSinalIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/alertas': typeof AuthenticatedAlertasRoute
+  '/_authenticated/parametros': typeof AuthenticatedParametrosRoute
   '/_authenticated/radar': typeof AuthenticatedRadarRoute
+  '/_authenticated/status': typeof AuthenticatedStatusRoute
+  '/_authenticated/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
+  '/_authenticated/sinal/$id': typeof AuthenticatedSinalIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/auth' | '/radar'
+  fullPaths:
+    | '/'
+    | '/auth'
+    | '/alertas'
+    | '/parametros'
+    | '/radar'
+    | '/status'
+    | '/ativo/$ticker'
+    | '/sinal/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/auth' | '/radar'
-  id: '__root__' | '/' | '/_authenticated' | '/auth' | '/_authenticated/radar'
+  to:
+    | '/'
+    | '/auth'
+    | '/alertas'
+    | '/parametros'
+    | '/radar'
+    | '/status'
+    | '/ativo/$ticker'
+    | '/sinal/$id'
+  id:
+    | '__root__'
+    | '/'
+    | '/_authenticated'
+    | '/auth'
+    | '/_authenticated/alertas'
+    | '/_authenticated/parametros'
+    | '/_authenticated/radar'
+    | '/_authenticated/status'
+    | '/_authenticated/ativo/$ticker'
+    | '/_authenticated/sinal/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -88,6 +160,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/alertas': {
+      id: '/_authenticated/alertas'
+      path: '/alertas'
+      fullPath: '/alertas'
+      preLoaderRoute: typeof AuthenticatedAlertasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/parametros': {
+      id: '/_authenticated/parametros'
+      path: '/parametros'
+      fullPath: '/parametros'
+      preLoaderRoute: typeof AuthenticatedParametrosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/radar': {
       id: '/_authenticated/radar'
       path: '/radar'
@@ -95,15 +181,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRadarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/status': {
+      id: '/_authenticated/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof AuthenticatedStatusRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/ativo/$ticker': {
+      id: '/_authenticated/ativo/$ticker'
+      path: '/ativo/$ticker'
+      fullPath: '/ativo/$ticker'
+      preLoaderRoute: typeof AuthenticatedAtivoTickerRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/sinal/$id': {
+      id: '/_authenticated/sinal/$id'
+      path: '/sinal/$id'
+      fullPath: '/sinal/$id'
+      preLoaderRoute: typeof AuthenticatedSinalIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
   }
 }
 
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedAlertasRoute: typeof AuthenticatedAlertasRoute
+  AuthenticatedParametrosRoute: typeof AuthenticatedParametrosRoute
   AuthenticatedRadarRoute: typeof AuthenticatedRadarRoute
+  AuthenticatedStatusRoute: typeof AuthenticatedStatusRoute
+  AuthenticatedAtivoTickerRoute: typeof AuthenticatedAtivoTickerRoute
+  AuthenticatedSinalIdRoute: typeof AuthenticatedSinalIdRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedAlertasRoute: AuthenticatedAlertasRoute,
+  AuthenticatedParametrosRoute: AuthenticatedParametrosRoute,
   AuthenticatedRadarRoute: AuthenticatedRadarRoute,
+  AuthenticatedStatusRoute: AuthenticatedStatusRoute,
+  AuthenticatedAtivoTickerRoute: AuthenticatedAtivoTickerRoute,
+  AuthenticatedSinalIdRoute: AuthenticatedSinalIdRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
