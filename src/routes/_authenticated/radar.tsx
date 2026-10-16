@@ -12,6 +12,8 @@ import { Pernas } from "@/components/radar/Pernas";
 import { MotivosRiscos, ScoreBadge, Tag } from "@/components/radar/Tags";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Button } from "@/components/ui/button";
+import { ColetarDados } from "@/components/radar/ColetarDados";
 
 export const Route = createFileRoute("/_authenticated/radar")({
   head: () => ({
@@ -94,9 +96,12 @@ function RadarPage() {
             {desatualizado(ultima, agora) && sinais.length > 0 && <Tag tone="warn">desatualizado</Tag>}
           </p>
         </div>
-        <button onClick={() => q.refetch()} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <RefreshCw className={`h-4 w-4 ${q.isFetching ? "animate-spin" : ""}`} /> Atualizar
-        </button>
+        <div className="flex flex-wrap items-start gap-2">
+          <Button variant="ghost" onClick={() => q.refetch()} disabled={q.isFetching} title="Reler sinais recebidos">
+            <RefreshCw className={`h-4 w-4 ${q.isFetching ? "animate-spin" : ""}`} /> Atualizar sinais
+          </Button>
+          <ColetarDados />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3 rounded-lg border bg-card p-3">

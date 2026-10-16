@@ -52,6 +52,8 @@ export type Database = {
       ativos: {
         Row: {
           atualizado_em: string
+          fonte_preco: string | null
+          historico_precos: Json | null
           nome: string | null
           preco: number | null
           setor: string | null
@@ -59,6 +61,8 @@ export type Database = {
         }
         Insert: {
           atualizado_em?: string
+          fonte_preco?: string | null
+          historico_precos?: Json | null
           nome?: string | null
           preco?: number | null
           setor?: string | null
@@ -66,6 +70,8 @@ export type Database = {
         }
         Update: {
           atualizado_em?: string
+          fonte_preco?: string | null
+          historico_precos?: Json | null
           nome?: string | null
           preco?: number | null
           setor?: string | null
