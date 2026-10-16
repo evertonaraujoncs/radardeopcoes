@@ -12,3 +12,5 @@
 - Normalize signal legs through `src/lib/payoff.ts` before display or local payoff calculations; ingestion may contain numeric sides or Portuguese buy/sell strings and lowercase option types.
 - Treat empty market-data queries as missing coverage, not proof that news or events do not exist; render loading and query failures separately.
 - Payoff calculations and labels use lots of 100 units, with contract premiums displayed per unit, to keep chart and structure units consistent.
+- Manual market collection is available to authenticated users only for registered, readable tickers; server-owned fetching controls all shared writes, never accepting submitted prices or arbitrary URLs.
+- Collection preserves provider quote timestamps and reports partial coverage; stored price snapshots must never refresh signal scores or imply recalculation of the external engine.
