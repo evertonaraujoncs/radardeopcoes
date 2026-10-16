@@ -55,7 +55,7 @@ function ParametrosPage() {
       prob_lucro_min: (num(v.prob) ?? 50) / 100, estrategias_ativas: est, updated_at: new Date().toISOString(),
     });
     setSalvando(false);
-    if (error) return toast.error("Não foi possível salvar: " + error.message);
+    if (error) { toast.error("Não foi possível salvar: " + error.message); return; }
     toast.success("Parâmetros salvos. O robô usa estes valores na próxima execução.");
     qc.invalidateQueries({ queryKey: ["parametros"] });
   }
