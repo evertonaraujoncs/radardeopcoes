@@ -86,7 +86,7 @@ export const Route = createFileRoute("/api/public/ingest")({
         if (sinais?.length) {
           const { error } = await supabaseAdmin
             .from("sinais")
-            .upsert(sinais, { onConflict: "chave" });
+            .upsert(sinais as never, { onConflict: "chave" });
           if (error) return Response.json({ erro: `sinais: ${error.message}` }, { status: 500 });
           resultado["sinais"] = sinais.length;
         }
