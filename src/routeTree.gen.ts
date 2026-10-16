@@ -18,6 +18,7 @@ import { Route as AuthenticatedRadarRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedStatusRouteImport } from './routes/_authenticated/status'
 import { Route as AuthenticatedAtivoTickerRouteImport } from './routes/_authenticated/ativo.$ticker'
 import { Route as AuthenticatedSinalIdRouteImport } from './routes/_authenticated/sinal.$id'
+import { Route as ApiPublicIngestRouteImport } from './routes/api/public/ingest'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -64,6 +65,11 @@ const AuthenticatedSinalIdRoute = AuthenticatedSinalIdRouteImport.update({
   path: '/sinal/$id',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const ApiPublicIngestRoute = ApiPublicIngestRouteImport.update({
+  id: '/api/public/ingest',
+  path: '/api/public/ingest',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -74,6 +80,7 @@ export interface FileRoutesByFullPath {
   '/status': typeof AuthenticatedStatusRoute
   '/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
   '/sinal/$id': typeof AuthenticatedSinalIdRoute
+  '/api/public/ingest': typeof ApiPublicIngestRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -84,6 +91,7 @@ export interface FileRoutesByTo {
   '/status': typeof AuthenticatedStatusRoute
   '/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
   '/sinal/$id': typeof AuthenticatedSinalIdRoute
+  '/api/public/ingest': typeof ApiPublicIngestRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -96,6 +104,7 @@ export interface FileRoutesById {
   '/_authenticated/status': typeof AuthenticatedStatusRoute
   '/_authenticated/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
   '/_authenticated/sinal/$id': typeof AuthenticatedSinalIdRoute
+  '/api/public/ingest': typeof ApiPublicIngestRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -108,6 +117,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/ativo/$ticker'
     | '/sinal/$id'
+    | '/api/public/ingest'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -118,6 +128,7 @@ export interface FileRouteTypes {
     | '/status'
     | '/ativo/$ticker'
     | '/sinal/$id'
+    | '/api/public/ingest'
   id:
     | '__root__'
     | '/'
@@ -129,12 +140,14 @@ export interface FileRouteTypes {
     | '/_authenticated/status'
     | '/_authenticated/ativo/$ticker'
     | '/_authenticated/sinal/$id'
+    | '/api/public/ingest'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AuthenticatedRouteRoute: typeof AuthenticatedRouteRouteWithChildren
   AuthRoute: typeof AuthRoute
+  ApiPublicIngestRoute: typeof ApiPublicIngestRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -202,6 +215,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSinalIdRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/api/public/ingest': {
+      id: '/api/public/ingest'
+      path: '/api/public/ingest'
+      fullPath: '/api/public/ingest'
+      preLoaderRoute: typeof ApiPublicIngestRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -230,6 +250,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthenticatedRouteRoute: AuthenticatedRouteRouteWithChildren,
   AuthRoute: AuthRoute,
+  ApiPublicIngestRoute: ApiPublicIngestRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
