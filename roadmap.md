@@ -3,3 +3,6 @@
 - [x] Restaurar a curva completa do payoff e verificar seus valores.
 - [x] Diferenciar carregamento, erro e ausência de dados em eventos, notícias e histórico.
 - [x] Verificar o sinal autenticado e esclarecer a cobertura real dos dados de mercado: tabelas vazias, nenhuma coleta histórica ampla comprovada.
+
+## Coleta manual
+- [ ] Adicionar botão para iniciar coleta real no Radar — bloqueado pela ausência de um coletor conectado; definir criação no app ou conexão do robô externo.
