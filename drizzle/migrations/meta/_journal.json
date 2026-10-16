@@ -8,6 +8,13 @@
       "when": 1792041439372,
       "tag": "0000_migration",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792121007420,
+      "tag": "0001_market_collection_provenance",
+      "breakpoints": true
     }
   ]
 }
