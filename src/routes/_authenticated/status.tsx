@@ -13,6 +13,8 @@ export const Route = createFileRoute("/_authenticated/status")({
       { name: "description", content: "Últimas execuções do robô de coleta e seu estado." },
       { property: "og:title", content: "Status do robô — Radar de Opções B3" },
       { property: "og:description", content: "Últimas execuções do robô de coleta e seu estado." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: StatusPage,

@@ -15,6 +15,8 @@ export const Route = createFileRoute("/auth")({
       { name: "description", content: "Acesse o Radar de Opções B3 para ver sinais de opções em tempo real." },
       { property: "og:title", content: "Entrar — Radar de Opções B3" },
       { property: "og:description", content: "Acesse o Radar de Opções B3 para ver sinais de opções em tempo real." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AuthPage,
