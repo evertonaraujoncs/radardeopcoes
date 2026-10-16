@@ -105,7 +105,7 @@ export const Route = createFileRoute("/api/public/ingest")({
 
         for (const [tabela, linhas] of simples) {
           if (!linhas?.length) continue;
-          const { error } = await supabaseAdmin.from(tabela).insert(linhas);
+          const { error } = await supabaseAdmin.from(tabela).insert(linhas as never);
           if (error) return Response.json({ erro: `${tabela}: ${error.message}` }, { status: 500 });
           resultado[tabela] = linhas.length;
         }
