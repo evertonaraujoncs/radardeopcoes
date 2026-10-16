@@ -58,8 +58,13 @@ export const collectMarket = createServerFn({ method: "POST" })
         const rows = parseOptions(payload.data.cotacoesOpcoes, ticker, expiry.value, now);
         const { data: existing, error: readError } = await db.from("opcoes_grade").select("ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry.value);
         if (readError) throw readError;
-        const keys = new Set((existing ?? []).map(r => `${r.ticker}:${Date.parse(r.data_coleta)}`));
-        const fresh = rows.filter(r => !keys.has(`${r.ticker}:${Date.parse(r.data_coleta)}`));
+        const keys = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
+        const fresh = rows.filter(r => {
+          const key = `${r.ticker}:${r.data_coleta.slice(0, 10)}`;
+          if (keys.has(key)) return false;
+          keys.add(key);
+          return true;
+        });
         for (let i = 0; i < fresh.length; i += 500) {
           const { error } = await db.from("opcoes_grade").insert(fresh.slice(i, i + 500));
           if (error) throw error;

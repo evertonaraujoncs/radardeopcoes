@@ -5,5 +5,6 @@
 - [x] Verificar o sinal autenticado e esclarecer a cobertura real dos dados de mercado: tabelas vazias, nenhuma coleta histórica ampla comprovada.
 
 ## Coleta manual
-- [ ] Conectar coleta real de fontes públicas dentro do app e adicionar botão no Radar.
-- [ ] Verificar coleta autenticada, persistência e limitações de cobertura.
+- [x] Conectar coleta real de fontes públicas dentro do app e adicionar botão no Radar (Yahoo Finance e opcoes.net.br).
+- [x] Verificar coleta autenticada, persistência e limitações de cobertura.
+- [ ] Coleta de notícias e eventos: conexão adicional não autorizada; fonte de calendário verificada ainda ausente.
