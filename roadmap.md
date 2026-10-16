@@ -7,4 +7,6 @@
 ## Coleta manual
 - [x] Conectar coleta real de fontes públicas dentro do app e adicionar botão no Radar (Yahoo Finance e opcoes.net.br).
 - [x] Verificar coleta autenticada, persistência e limitações de cobertura.
-- [ ] Coleta de notícias e eventos: conexão adicional não autorizada; fonte de calendário verificada ainda ausente.
+- [ ] Selecionar ticker com opções na B3 ou Todos e persistir a coleta correspondente.
+- [ ] Integrar notícias e eventos do Yahoo Finance Brasil e verificar cobertura real.
+- [ ] Verificar dados necessários para IV, gregas, bid/ask e recálculo; informar bloqueios sem apresentar recomendações fictícias.
