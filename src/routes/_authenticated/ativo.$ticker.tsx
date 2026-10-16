@@ -51,7 +51,7 @@ function AtivoPage() {
       (por.get(r.data_coleta) ?? por.set(r.data_coleta, []).get(r.data_coleta)!).push(iv);
     }
     return [...por.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([d, xs]) => {
-      const s = [...xs].sort((a, b) => a - b); return { d, iv: s[Math.floor(s.length / 2)] };
+      const s = [...xs].sort((a, b) => a - b); return { d, iv: s[Math.floor(s.length / 2)] ?? 0 };
     });
   } });
   const grade = useQuery({ queryKey: ["grade", ticker], queryFn: async () => {
@@ -66,7 +66,7 @@ function AtivoPage() {
   const ivr = useMemo(() => {
     const h = ivHist.data ?? []; if (h.length < 2) return null;
     const vals = h.map((x) => x.iv); const min = Math.min(...vals), max = Math.max(...vals);
-    return max > min ? (vals[vals.length - 1] - min) / (max - min) : null;
+    return max > min ? ((vals[vals.length - 1] ?? 0) - min) / (max - min) : null;
   }, [ivHist.data]);
 
   const linhas = grade.data?.linhas ?? [];
@@ -103,7 +103,7 @@ function AtivoPage() {
           </div>
           {(ivHist.data?.length ?? 0) < 2 ? <p className="text-sm text-muted-foreground py-10 text-center">Histórico insuficiente.</p> : (
             <div className="h-52"><ResponsiveContainer>
-              <LineChart data={ivHist.data}>
+              <LineChart data={ivHist.data ?? []}>
                 <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
                 <XAxis dataKey="d" tickFormatter={(v) => fmtDate(v).slice(0, 5)} stroke="var(--muted-foreground)" fontSize={11} />
                 <YAxis tickFormatter={(v) => fmtPct(v)} stroke="var(--muted-foreground)" fontSize={11} width={45} />
