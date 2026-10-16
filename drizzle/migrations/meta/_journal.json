@@ -15,6 +15,13 @@
       "when": 1792121007420,
       "tag": "0001_market_collection_provenance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792121717968,
+      "tag": "0002_rls_require_signed_in",
+      "breakpoints": true
     }
   ]
 }
