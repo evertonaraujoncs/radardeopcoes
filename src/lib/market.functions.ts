@@ -69,7 +69,7 @@ export const collectMarket = createServerFn({ method: "POST" })
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     const notes = `Yahoo Finance: ${historyCount} pregões (até 1 ano); opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. Notícias e eventos não conectados; IV, gregas e bid/ask não disponíveis. Sinais não recalculados. ${warnings.join("; ")}`;
-    const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount, status: "PARCIAL", notas: notes });
+    const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount, status: "AVISO", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
     return { ticker, historyCount, optionsCount, warnings, notes };
   });
