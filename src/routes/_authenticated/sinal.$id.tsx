@@ -86,6 +86,9 @@ function SinalPage() {
   const curva = (curvaRaw.length > 1 ? curvaRaw : curvaPayoff(pernas, Number(s.preco_ativo ?? pernas.find((p) => p.strike)?.strike ?? 0), asArr<number>(s.breakevens)))
     .map(([preco, r]) => ({ preco, r, pos: Math.max(0, r), neg: Math.min(0, r) }));
   const teste = s.chave.startsWith("TESTE-");
+  // The legacy integration fixture stored amounts per unit; the Python engine exports amounts per lot.
+  const unidadeMonetaria = teste ? 100 : 1;
+  const creditoLote = s.credito_debito == null ? null : Number(s.credito_debito) * unidadeMonetaria;
   const estrategia = s.estrategia === "trava_alta" && pernas.every((p) => p.tipo === "CALL") ? "Trava de alta com calls" : nomeEstrategia(s.estrategia);
   const velho = desatualizado(s.atualizado_em);
   const fat = (s.fatores ?? {}) as Record<string, number>;
@@ -139,10 +142,10 @@ function SinalPage() {
           <h2 className="text-sm font-semibold">Estrutura</h2>
           <Pernas pernas={pernas} />
           <dl className="num grid grid-cols-2 gap-2 text-sm">
-            <K l={Number(s.credito_debito) >= 0 ? "Crédito por unidade" : "Débito por unidade"} v={s.credito_debito == null ? "—" : fmtBRL(Math.abs(Number(s.credito_debito)))} c={corValor(s.credito_debito)} />
+            <K l={Number(s.credito_debito) >= 0 ? "Crédito / lote" : "Débito / lote"} v={creditoLote == null ? "—" : fmtBRL(Math.abs(creditoLote))} c={corValor(s.credito_debito)} />
             <K l="Prob. lucro" v={fmtPct(s.prob_lucro)} />
-            <K l="Lucro máx. / lote" v={s.lucro_max == null ? "Não informado" : fmtBRL(s.lucro_max)} c="text-gain" />
-            <K l="Perda máx. / lote" v={s.perda_max == null ? "Não informada" : fmtBRL(s.perda_max)} c="text-loss" />
+            <K l="Lucro máx. / lote" v={s.lucro_max == null ? "Não informado" : fmtBRL(Number(s.lucro_max) * unidadeMonetaria)} c="text-gain" />
+            <K l="Perda máx. / lote" v={s.perda_max == null ? "Não informada" : fmtBRL(Number(s.perda_max) * unidadeMonetaria)} c="text-loss" />
             <K l="Retorno/risco" v={fmtNum(s.retorno_sobre_risco)} />
             <K l="IV Rank" v={fmtPct(s.iv_rank)} />
             <K l="Valor esperado" v={fmtBRL(s.valor_esperado)} c={corValor(s.valor_esperado)} />
