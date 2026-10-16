@@ -13,6 +13,8 @@ export const Route = createFileRoute("/_authenticated/alertas")({
       { name: "description", content: "Feed em tempo real de novos sinais, mudanças de score e eventos." },
       { property: "og:title", content: "Alertas — Radar de Opções B3" },
       { property: "og:description", content: "Feed em tempo real de novos sinais, mudanças de score e eventos." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AlertasPage,

@@ -17,6 +17,8 @@ export const Route = createFileRoute("/_authenticated/ativo/$ticker")({
       { name: "description", content: `Cotação, fundamentos, IV e grade de opções de ${params.ticker}.` },
       { property: "og:title", content: `${params.ticker} — Radar de Opções B3` },
       { property: "og:description", content: `Cotação, fundamentos, IV e grade de opções de ${params.ticker}.` },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: AtivoPage,

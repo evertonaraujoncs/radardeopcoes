@@ -13,7 +13,9 @@ export function Noticias({ ticker, limite = 10 }: { ticker: string; limite?: num
       return data;
     },
   });
-  if (!q.data?.length) return <p className="text-sm text-muted-foreground">Sem notícias.</p>;
+  if (q.isPending) return <p className="text-sm text-muted-foreground">Carregando notícias…</p>;
+  if (q.isError) return <p className="text-sm text-loss">Não foi possível consultar as notícias. Tente novamente mais tarde.</p>;
+  if (!q.data?.length) return <p className="text-sm text-muted-foreground">Nenhuma notícia de {ticker} recebida. A cobertura de notícias não está confirmada.</p>;
   return (
     <ul className="space-y-3">
       {q.data.map((n) => {

@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft } from "lucide-react";
 import {
-  Area, AreaChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
+  Area, ComposedChart, CartesianGrid, Line, LineChart, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -11,6 +11,7 @@ import {
 import { Pernas } from "@/components/radar/Pernas";
 import { MotivosRiscos, ScoreBadge, Tag } from "@/components/radar/Tags";
 import { Noticias } from "@/components/radar/Noticias";
+import { curvaPayoff, normalizarPernas } from "@/lib/payoff";
 
 export const Route = createFileRoute("/_authenticated/sinal/$id")({
   head: () => ({
@@ -19,19 +20,12 @@ export const Route = createFileRoute("/_authenticated/sinal/$id")({
       { name: "description", content: "Payoff, evolução do score, fatores, eventos e notícias do sinal." },
       { property: "og:title", content: "Detalhe do sinal — Radar de Opções B3" },
       { property: "og:description", content: "Payoff, evolução do score, fatores, eventos e notícias do sinal." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SinalPage,
 });
-
-function payoffLocal(pernas: Perna[], S0: number): [number, number][] {
-  const pnl = (S: number) => pernas.reduce((t, p) => {
-    const v = p.tipo === "ACAO" ? S : p.tipo === "CALL" ? Math.max(0, S - (p.strike ?? 0)) : Math.max(0, (p.strike ?? 0) - S);
-    return t + p.lado * p.qtd * (v - p.preco);
-  }, 0) * 100;
-  const lo = S0 * 0.75, hi = S0 * 1.25;
-  return Array.from({ length: 60 }, (_, i) => { const S = lo + ((hi - lo) * i) / 59; return [S, pnl(S)]; });
-}
 
 const tt = { contentStyle: { background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 6, fontSize: 12 } };
 
@@ -62,27 +56,40 @@ function SinalPage() {
     enabled: !!ticker,
     queryKey: ["eventos-ate", ticker, s?.vencimento],
     queryFn: async () => {
+      if (!ticker || !s?.vencimento) return [];
       const hoje = new Date().toISOString().slice(0, 10);
       const [ev, dv] = await Promise.all([
-        supabase.from("eventos").select("*").eq("ticker", ticker!).gte("data", hoje).lte("data", s!.vencimento).order("data"),
-        supabase.from("dividendos").select("*").eq("ticker", ticker!).gte("data_com", hoje).lte("data_com", s!.vencimento).order("data_com"),
+        supabase.from("eventos").select("*").eq("ticker", ticker).gte("data", hoje).lte("data", s.vencimento).order("data"),
+        supabase.from("dividendos").select("*").eq("ticker", ticker).or(`and(data_com.gte.${hoje},data_com.lte.${s.vencimento}),and(data_pagamento.gte.${hoje},data_pagamento.lte.${s.vencimento})`).order("data_com"),
       ]);
       if (ev.error) throw ev.error;
       if (dv.error) throw dv.error;
       return [
         ...ev.data.map((e) => ({ data: e.data, titulo: e.tipo.replace(/_/g, " "), desc: e.descricao })),
-        ...dv.data.map((d) => ({ data: d.data_com, titulo: `Data-com ${d.tipo}`, desc: d.valor != null ? `${fmtBRL(d.valor)} por ação` : null })),
+        ...dv.data.flatMap((d) => {
+          const desc = d.valor != null ? `${fmtBRL(d.valor)} por ação` : null;
+          return [
+            ...(d.data_com >= hoje && d.data_com <= s.vencimento ? [{ data: d.data_com, titulo: `Data-com ${d.tipo}`, desc }] : []),
+            ...(d.data_pagamento && d.data_pagamento >= hoje && d.data_pagamento <= s.vencimento ? [{ data: d.data_pagamento, titulo: `Pagamento de ${d.tipo}`, desc }] : []),
+          ];
+        }),
       ].sort((a, b) => a.data.localeCompare(b.data));
     },
   });
 
   if (sinal.isLoading) return <div className="h-96 rounded-lg border bg-card animate-pulse" />;
+  if (sinal.isError) return <p className="text-loss">Não foi possível consultar o sinal. Tente novamente mais tarde.</p>;
   if (!s) return <p className="text-muted-foreground">Sinal não encontrado. <Link to="/radar" className="text-primary underline">Voltar</Link></p>;
 
-  const pernas = asArr<Perna>(s.pernas);
-  const curvaRaw = asArr<[number, number]>(s.curva_payoff);
-  const curva = (curvaRaw.length ? curvaRaw : payoffLocal(pernas, Number(s.preco_ativo ?? pernas.find((p) => p.strike)?.strike ?? 0)))
+  const pernas = normalizarPernas(s.pernas);
+  const curvaRaw = asArr<[number, number]>(s.curva_payoff).filter((p) => Array.isArray(p) && p.length === 2 && p.every((v) => typeof v === "number" && Number.isFinite(v)));
+  const curva = (curvaRaw.length > 1 ? curvaRaw : curvaPayoff(pernas, Number(s.preco_ativo ?? pernas.find((p) => p.strike)?.strike ?? 0), asArr<number>(s.breakevens)))
     .map(([preco, r]) => ({ preco, r, pos: Math.max(0, r), neg: Math.min(0, r) }));
+  const teste = s.chave.startsWith("TESTE-");
+  // The legacy integration fixture stored amounts per unit; the Python engine exports amounts per lot.
+  const unidadeMonetaria = teste ? 100 : 1;
+  const creditoLote = s.credito_debito == null ? null : Number(s.credito_debito) * unidadeMonetaria;
+  const estrategia = s.estrategia === "trava_alta" && pernas.every((p) => p.tipo === "CALL") ? "Trava de alta com calls" : nomeEstrategia(s.estrategia);
   const velho = desatualizado(s.atualizado_em);
   const fat = (s.fatores ?? {}) as Record<string, number>;
   const histData = (hist.data ?? []).map((h) => ({
@@ -95,12 +102,14 @@ function SinalPage() {
     <div className="space-y-5">
       <Link to="/radar" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" />Radar</Link>
 
+      {teste && <p role="status" className="border-l-2 border-warn bg-warn/10 px-4 py-3 text-sm text-warn">Sinal de teste de integração — não é uma oportunidade validada com dados reais de mercado.</p>}
+
       <div className="flex flex-wrap items-center gap-4">
         <ScoreBadge score={s.score} apagado={velho} />
         <div>
           <div className="flex items-center gap-2">
             <Link to="/ativo/$ticker" params={{ ticker: s.ticker }} className="num text-2xl font-semibold hover:text-primary">{s.ticker}</Link>
-            <span className="text-xl">{nomeEstrategia(s.estrategia)}</span>
+            <span className="text-xl">{estrategia}</span>
             {s.status === "encerrado" && <Tag tone="loss">encerrado</Tag>}
             {velho && <Tag tone="warn">desatualizado</Tag>}
           </div>
@@ -111,9 +120,9 @@ function SinalPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="lg:col-span-2 rounded-lg border bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Payoff no vencimento (por lote de 100)</h2>
-          <div className="h-72">
+          {!curva.length ? <p className="py-10 text-sm text-muted-foreground">Dados da estrutura insuficientes para calcular o payoff.</p> : <div className="h-72" aria-label="Gráfico de resultado no vencimento por lote de 100">
             <ResponsiveContainer>
-              <AreaChart data={curva} margin={{ left: 10, right: 10, top: 10 }}>
+              <ComposedChart data={curva} margin={{ left: 10, right: 10, top: 10 }}>
                 <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
                 <XAxis dataKey="preco" type="number" domain={["dataMin", "dataMax"]} tickFormatter={(v) => fmtNum(v)} stroke="var(--muted-foreground)" fontSize={11} />
                 <YAxis tickFormatter={(v) => fmtNum(v)} stroke="var(--muted-foreground)" fontSize={11} width={70} />
@@ -121,20 +130,22 @@ function SinalPage() {
                 <ReferenceLine y={0} stroke="var(--muted-foreground)" />
                 {s.preco_ativo != null && <ReferenceLine x={Number(s.preco_ativo)} stroke="var(--primary)" strokeDasharray="4 4" label={{ value: "atual", fill: "var(--primary)", fontSize: 11 }} />}
                 {asArr<number>(s.breakevens).map((b) => <ReferenceLine key={b} x={b} stroke="var(--muted-foreground)" strokeDasharray="2 4" />)}
-                <Area dataKey="pos" name="Ganho" stroke="var(--gain)" fill="var(--gain)" fillOpacity={0.2} isAnimationActive={false} />
-                <Area dataKey="neg" name="Perda" stroke="var(--loss)" fill="var(--loss)" fillOpacity={0.2} isAnimationActive={false} />
-              </AreaChart>
+                <Area dataKey="pos" name="Ganho" stroke="none" fill="var(--gain)" fillOpacity={0.2} tooltipType="none" isAnimationActive={false} />
+                <Area dataKey="neg" name="Perda" stroke="none" fill="var(--loss)" fillOpacity={0.2} tooltipType="none" isAnimationActive={false} />
+                <Line dataKey="r" name="Resultado no vencimento" stroke="var(--foreground)" strokeWidth={2.5} dot={false} isAnimationActive={false} />
+              </ComposedChart>
             </ResponsiveContainer>
-          </div>
+          </div>}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"><span className="text-foreground">━ Resultado no vencimento</span><span className="text-gain">Ganho</span><span className="text-loss">Perda</span><span className="text-primary">┆ Preço atual</span></div>
         </section>
         <section className="rounded-lg border bg-card p-4 space-y-3">
           <h2 className="text-sm font-semibold">Estrutura</h2>
           <Pernas pernas={pernas} />
           <dl className="num grid grid-cols-2 gap-2 text-sm">
-            <K l={Number(s.credito_debito) >= 0 ? "Crédito" : "Débito"} v={fmtBRL(Math.abs(Number(s.credito_debito ?? 0)))} c={corValor(s.credito_debito)} />
+            <K l={Number(s.credito_debito) >= 0 ? "Crédito / lote" : "Débito / lote"} v={creditoLote == null ? "—" : fmtBRL(Math.abs(creditoLote))} c={corValor(s.credito_debito)} />
             <K l="Prob. lucro" v={fmtPct(s.prob_lucro)} />
-            <K l="Lucro máx." v={s.lucro_max == null ? "ilimitado" : fmtBRL(s.lucro_max)} c="text-gain" />
-            <K l="Perda máx." v={s.perda_max == null ? "ilimitada" : fmtBRL(s.perda_max)} c="text-loss" />
+            <K l="Lucro máx. / lote" v={s.lucro_max == null ? "Não informado" : fmtBRL(Number(s.lucro_max) * unidadeMonetaria)} c="text-gain" />
+            <K l="Perda máx. / lote" v={s.perda_max == null ? "Não informada" : fmtBRL(Number(s.perda_max) * unidadeMonetaria)} c="text-loss" />
             <K l="Retorno/risco" v={fmtNum(s.retorno_sobre_risco)} />
             <K l="IV Rank" v={fmtPct(s.iv_rank)} />
             <K l="Valor esperado" v={fmtBRL(s.valor_esperado)} c={corValor(s.valor_esperado)} />
@@ -147,7 +158,7 @@ function SinalPage() {
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="lg:col-span-2 rounded-lg border bg-card p-4">
           <h2 className="mb-2 text-sm font-semibold">Evolução do score e da probabilidade</h2>
-          {histData.length < 2 ? <p className="text-sm text-muted-foreground py-10 text-center">Histórico insuficiente ainda.</p> : (
+          {hist.isPending ? <p className="py-10 text-center text-sm text-muted-foreground">Carregando histórico do sinal…</p> : hist.isError ? <p className="py-10 text-center text-sm text-loss">Não foi possível consultar o histórico do sinal.</p> : histData.length < 2 ? <p className="text-sm text-muted-foreground py-10 text-center">{histData.length} registro(s) de evolução do sinal recebido(s). Não há histórico suficiente para traçar as curvas.</p> : (
             <div className="h-60">
               <ResponsiveContainer>
                 <LineChart data={histData}>
@@ -182,7 +193,8 @@ function SinalPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-lg border bg-card p-4">
           <h2 className="mb-3 text-sm font-semibold">Eventos até o vencimento</h2>
-          {!eventos.data?.length ? <p className="text-sm text-muted-foreground">Nenhum evento previsto.</p> : (
+          <p className="mb-3 text-xs text-muted-foreground">{s.ticker} · até {fmtDate(s.vencimento)}</p>
+          {eventos.isPending ? <p className="text-sm text-muted-foreground">Carregando eventos…</p> : eventos.isError ? <p className="text-sm text-loss">Não foi possível consultar eventos e proventos.</p> : !eventos.data?.length ? <p className="text-sm text-muted-foreground">Nenhum evento ou provento recebido para este período. Isso não confirma a ausência de eventos no mercado.</p> : (
             <ul className="space-y-2 text-sm">
               {eventos.data.map((e, i) => (
                 <li key={i} className="flex gap-3"><span className="num text-warn w-20 shrink-0">{fmtDate(e.data)}</span>

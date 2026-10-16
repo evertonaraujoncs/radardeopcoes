@@ -20,6 +20,8 @@ export const Route = createFileRoute("/_authenticated/radar")({
       { name: "description", content: "Sinais ativos de estruturas com opções ordenados por score." },
       { property: "og:title", content: "Radar — Radar de Opções B3" },
       { property: "og:description", content: "Sinais ativos de estruturas com opções ordenados por score." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: RadarPage,

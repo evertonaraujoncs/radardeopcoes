@@ -16,6 +16,8 @@ export const Route = createFileRoute("/_authenticated/parametros")({
       { name: "description", content: "Capital, risco máximo, estratégias ativas e filtros mínimos." },
       { property: "og:title", content: "Parâmetros — Radar de Opções B3" },
       { property: "og:description", content: "Capital, risco máximo, estratégias ativas e filtros mínimos." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: ParametrosPage,
