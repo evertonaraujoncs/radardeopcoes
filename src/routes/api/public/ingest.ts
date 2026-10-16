@@ -82,25 +82,26 @@ export const Route = createFileRoute("/api/public/ingest")({
         const resultado: Record<string, number | string> = {};
 
         // Sinais: upsert pela chave única (atualiza sinal existente ou cria novo)
-        if (p.sinais?.length) {
+        const sinais = p["sinais"];
+        if (sinais?.length) {
           const { error } = await supabaseAdmin
             .from("sinais")
-            .upsert(p.sinais, { onConflict: "chave" });
+            .upsert(sinais, { onConflict: "chave" });
           if (error) return Response.json({ erro: `sinais: ${error.message}` }, { status: 500 });
-          resultado.sinais = p.sinais.length;
+          resultado["sinais"] = sinais.length;
         }
 
         // Demais tabelas: inserção simples
         const simples = [
-          ["ativos", p.ativos],
-          ["opcoes_grade", p.opcoes_grade],
-          ["sinais_historico", p.sinais_historico],
-          ["alertas", p.alertas],
-          ["noticias", p.noticias],
-          ["fundamentos", p.fundamentos],
-          ["eventos", p.eventos],
-          ["dividendos", p.dividendos],
-          ["scraper_status", p.scraper_status],
+          ["ativos", p["ativos"]],
+          ["opcoes_grade", p["opcoes_grade"]],
+          ["sinais_historico", p["sinais_historico"]],
+          ["alertas", p["alertas"]],
+          ["noticias", p["noticias"]],
+          ["fundamentos", p["fundamentos"]],
+          ["eventos", p["eventos"]],
+          ["dividendos", p["dividendos"]],
+          ["scraper_status", p["scraper_status"]],
         ] as const;
 
         for (const [tabela, linhas] of simples) {
