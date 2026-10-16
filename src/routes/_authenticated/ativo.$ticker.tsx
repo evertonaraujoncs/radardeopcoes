@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
-import { desatualizado, fmtBRL, fmtDate, fmtInt, fmtNum, fmtPct, haQuanto } from "@/lib/format";
+import { desatualizado, fmtBRL, fmtDate, fmtDateTime, fmtInt, fmtNum, fmtPct, haQuanto } from "@/lib/format";
 import { Noticias } from "@/components/radar/Noticias";
 import { Tag } from "@/components/radar/Tags";
 import { Input } from "@/components/ui/input";
@@ -57,12 +57,15 @@ function AtivoPage() {
     });
   } });
   const grade = useQuery({ queryKey: ["grade", ticker], queryFn: async () => {
-    const ult = await supabase.from("opcoes_grade").select("data_coleta").eq("ativo", ticker).order("data_coleta", { ascending: false }).limit(1);
-    if (ult.error) throw ult.error;
-    if (!ult.data[0]) return { data: null as string | null, linhas: [] };
-    const { data, error } = await supabase.from("opcoes_grade").select("*").eq("ativo", ticker).eq("data_coleta", ult.data[0].data_coleta)
-      .order("vencimento").order("strike").limit(2000);
-    if (error) throw error; return { data: ult.data[0].data_coleta, linhas: data };
+    const { data, error } = await supabase.from("opcoes_grade").select("*").eq("ativo", ticker)
+      .order("data_coleta", { ascending: false }).limit(10000);
+    if (error) throw error;
+    const latest = new Map<string, (typeof data)[number]>();
+    for (const row of data) {
+      const key = `${row.ticker}:${row.vencimento}`;
+      if (!latest.has(key)) latest.set(key, row);
+    }
+    return { data: data[0]?.data_coleta ?? null, linhas: [...latest.values()].sort((a, b) => (a.vencimento ?? "").localeCompare(b.vencimento ?? "") || Number(a.strike) - Number(b.strike)) };
   } });
 
   const ivr = useMemo(() => {
@@ -88,6 +91,18 @@ function AtivoPage() {
         <div className="num text-3xl font-semibold text-primary">{fmtBRL(a?.preco)}</div>
         <p className="text-xs text-muted-foreground pb-1">atualizado {haQuanto(a?.atualizado_em)} {velho && <Tag tone="warn">desatualizado</Tag>}</p>
       </div>
+
+      {a?.historico_precos && Array.isArray(a.historico_precos) && <section className="space-y-2">
+        <h2 className="text-sm font-semibold">Histórico de preços · {a.historico_precos.length} pregões</h2>
+        {a.fonte_preco && <a href={a.fonte_preco} target="_blank" rel="noreferrer" className="text-xs text-primary">Fonte: Yahoo Finance · até 1 ano</a>}
+        <div className="h-52"><ResponsiveContainer><LineChart data={a.historico_precos}>
+          <CartesianGrid stroke="var(--border)" strokeDasharray="3 3" />
+          <XAxis dataKey="momento" tickFormatter={(v) => fmtDate(v).slice(0, 5)} stroke="var(--muted-foreground)" fontSize={11} />
+          <YAxis stroke="var(--muted-foreground)" fontSize={11} domain={["auto", "auto"]} />
+          <Tooltip {...tt} labelFormatter={(v: string) => fmtDate(v)} formatter={(v: number) => fmtBRL(v)} />
+          <Line dataKey="fechamento" name="Fechamento" stroke="var(--primary)" dot={false} strokeWidth={2} />
+        </LineChart></ResponsiveContainer></div>
+      </section>}
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="rounded-lg border bg-card p-4">
@@ -133,21 +148,23 @@ function AtivoPage() {
 
       <section className="rounded-lg border bg-card p-4">
         <div className="mb-3 flex flex-wrap items-center gap-3">
-          <h2 className="text-sm font-semibold mr-auto">Grade de opções {grade.data?.data && <span className="text-xs font-normal text-muted-foreground">coleta de {fmtDate(grade.data.data)}</span>}</h2>
+          <h2 className="text-sm font-semibold mr-auto">Grade de opções {grade.data?.data && <span className="text-xs font-normal text-muted-foreground">última cotação de {fmtDateTime(grade.data.data)}</span>}</h2>
           <select className={sel} value={fv} onChange={(e) => setFv(e.target.value)}><option value="">Todos vencimentos</option>{vencs.map((v) => <option key={v} value={v}>{fmtDate(v)}</option>)}</select>
           <select className={sel} value={ft} onChange={(e) => setFt(e.target.value)}><option value="">CALL e PUT</option><option>CALL</option><option>PUT</option></select>
           <Input className="w-36" inputMode="numeric" placeholder="Negócios mín." value={fl} onChange={(e) => setFl(e.target.value)} />
         </div>
+        {a?.fonte_preco && <p className="mb-3 text-xs text-warn">Fonte: opcoes.net.br · último negócio por contrato, não tempo real garantido. IV, gregas e bid/ask indisponíveis na coleta pública.</p>}
         {!filtradas.length ? <p className="text-sm text-muted-foreground">Nenhuma opção.</p> : (
           <div className="max-h-[520px] overflow-auto">
             <Table><TableHeader className="sticky top-0 bg-card"><TableRow>
-              <TableHead>Código</TableHead><TableHead>Tipo</TableHead><TableHead>Venc.</TableHead><TableHead className="text-right">Strike</TableHead>
+              <TableHead>Código</TableHead><TableHead>Cotação em</TableHead><TableHead>Tipo</TableHead><TableHead>Venc.</TableHead><TableHead className="text-right">Strike</TableHead>
               <TableHead className="text-right">Último</TableHead><TableHead className="text-right">Bid</TableHead><TableHead className="text-right">Ask</TableHead>
               <TableHead className="text-right">Negócios</TableHead><TableHead className="text-right">Volume</TableHead><TableHead className="text-right">IV</TableHead><TableHead className="text-right">Delta</TableHead>
             </TableRow></TableHeader>
               <TableBody className="num text-xs">{filtradas.map((l) => (
                 <TableRow key={l.id}>
                   <TableCell className="font-semibold">{l.ticker}</TableCell>
+                  <TableCell>{fmtDateTime(l.data_coleta)}</TableCell>
                   <TableCell className={l.tipo?.toUpperCase() === "CALL" ? "text-gain" : "text-loss"}>{l.tipo}</TableCell>
                   <TableCell>{fmtDate(l.vencimento)}</TableCell><TableCell className="text-right">{fmtNum(l.strike)}</TableCell>
                   <TableCell className="text-right">{fmtNum(l.ultimo)}</TableCell><TableCell className="text-right">{fmtNum(l.bid)}</TableCell><TableCell className="text-right">{fmtNum(l.ask)}</TableCell>
