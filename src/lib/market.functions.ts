@@ -1,17 +1,27 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { parseOptions } from "./market-data";
+import { parseOptions, parseOptionTickers, parseYahooNews, parseYahooEvents } from "./market-data";
+
+async function optionCatalog() {
+  const response = await fetch("https://opcoes.net.br/sitemaps/acoes-com-opcoes.xml", { signal: AbortSignal.timeout(20000) });
+  if (!response.ok) throw new Error(`Lista de ativos: HTTP ${response.status}`);
+  const tickers = parseOptionTickers(await response.text());
+  if (!tickers.length) throw new Error("A fonte não retornou a lista de ativos com opções.");
+  return tickers;
+}
 
 export const collectionTargets = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
-    const [assets, signals] = await Promise.all([
-      context.supabase.from("ativos").select("ticker"),
-      context.supabase.from("sinais").select("ticker").eq("status", "ativo"),
-    ]);
-    if (assets.error || signals.error) throw new Error("Não foi possível consultar os ativos para coleta.");
-    return [...new Set([...(assets.data ?? []), ...(signals.data ?? [])].map(a => a.ticker))].sort();
+    // Authenticate before consulting the server-owned catalog or writing shared rows.
+    const tickers = await optionCatalog();
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+    const { error } = await db.from("ativos").upsert(tickers.map(ticker => ({ ticker })), { onConflict: "ticker", ignoreDuplicates: true });
+    if (error) throw new Error("Não foi possível registrar a lista de ativos.");
+    const readable = await context.supabase.from("ativos").select("ticker").in("ticker", tickers);
+    if (readable.error) throw new Error("Não foi possível consultar os ativos para coleta.");
+    return (readable.data ?? []).map(row => row.ticker).sort();
   });
 
 export const collectMarket = createServerFn({ method: "POST" })
@@ -29,6 +39,8 @@ export const collectMarket = createServerFn({ method: "POST" })
     const warnings: string[] = [];
     let historyCount = 0;
     let optionsCount = 0;
+    let newsCount = 0;
+    let eventsCount = 0;
     const now = new Date().toISOString();
     const json = async (url: string) => {
       const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20000) });
@@ -73,8 +85,32 @@ export const collectMarket = createServerFn({ method: "POST" })
       }
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
-    const notes = `Yahoo Finance: ${historyCount} pregões (até 1 ano); opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. Notícias e eventos não conectados; IV, gregas e bid/ask não disponíveis. Sinais não recalculados. ${warnings.join("; ")}`;
-    const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount, status: "AVISO", notas: notes });
+    try {
+      const payload = await json(`https://query1.finance.yahoo.com/v1/finance/search?q=${ticker}.SA&newsCount=20&quotesCount=0`);
+      const rows = parseYahooNews(payload, ticker);
+      const existing = await db.from("noticias").select("url").eq("ticker", ticker);
+      if (existing.error) throw existing.error;
+      const urls = new Set(existing.data.map(row => row.url));
+      const fresh = rows.filter(row => { if (urls.has(row.url)) return false; urls.add(row.url); return true; });
+      if (fresh.length) { const saved = await db.from("noticias").insert(fresh); if (saved.error) throw saved.error; }
+      newsCount = fresh.length;
+      if (!rows.length) warnings.push("Notícias: Yahoo não retornou notícias vinculadas a este ticker; cobertura não confirmada.");
+    } catch (error) { warnings.push(`Notícias Yahoo: ${error instanceof Error ? error.message : "falha na coleta"}`); }
+    try {
+      const payload = await json(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}.SA?modules=calendarEvents`);
+      const calendar = payload.quoteSummary?.result?.[0]?.calendarEvents;
+      if (!calendar) throw new Error("Calendário não disponibilizado pela fonte");
+      const rows = parseYahooEvents(calendar, ticker);
+      const existing = await db.from("eventos").select("data,tipo").eq("ticker", ticker);
+      if (existing.error) throw existing.error;
+      const keys = new Set(existing.data.map(row => `${row.data}:${row.tipo}`));
+      const fresh = rows.filter(row => { const key = `${row.data}:${row.tipo}`; if (keys.has(key)) return false; keys.add(key); return true; });
+      if (fresh.length) { const saved = await db.from("eventos").insert(fresh); if (saved.error) throw saved.error; }
+      eventsCount = fresh.length;
+      if (!rows.length) warnings.push("Eventos: Yahoo não retornou datas; cobertura não confirmada.");
+    } catch (error) { warnings.push(`Eventos Yahoo: ${error instanceof Error ? error.message : "falha na coleta"}`); }
+    const notes = `Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. Recomendações não recalculadas: fonte sem bid/ask e motor externo não integrado. ${warnings.join("; ")}`;
+    const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
-    return { ticker, historyCount, optionsCount, warnings, notes };
+    return { ticker, historyCount, optionsCount, newsCount, eventsCount, warnings, notes };
   });
