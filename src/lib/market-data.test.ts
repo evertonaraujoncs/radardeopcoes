@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { parseOptions } from "./market-data";
+import { parseOptions, parseOptionTickers, selectedTargets, parseYahooNews, parseYahooEvents } from "./market-data";
+
+describe("collection selection", () => {
+  it("collects only the selected ticker", () => {
+    expect(selectedTargets(["PETR4", "VALE3"], "VALE3")).toEqual(["VALE3"]);
+    expect(selectedTargets(["PETR4", "VALE3"], "FAKE3")).toEqual([]);
+  });
+  it("Todos collects the full available list", () => {
+    expect(selectedTargets(["PETR4", "VALE3"], "all")).toEqual(["PETR4", "VALE3"]);
+  });
+  it("discovers only option tickers, deduplicated", () => {
+    expect(parseOptionTickers("<loc>https://opcoes.net.br/opcoes/bovespa/VALE3</loc><loc>https://opcoes.net.br/opcoes/bovespa/PETR4</loc><loc>https://opcoes.net.br/opcoes/bovespa/VALE3</loc><loc>https://opcoes.net.br/acoes/FAKE3</loc>")).toEqual(["PETR4", "VALE3"]);
+  });
+});
+
+describe("Yahoo coverage", () => {
+  it("only saves attributed news with the original publication time", () => {
+    const article = { title: "Resultados", link: "https://finance.yahoo.com/news/results", relatedTickers: ["PETR4.SA"], providerPublishTime: 1760000000 };
+    expect(parseYahooNews({ news: [article] }, "PETR4")[0]).toMatchObject({ ticker: "PETR4", fonte: "Yahoo Finance · Yahoo", publicado_em: "2025-10-09T08:53:20.000Z", sentimento: null });
+    expect(parseYahooNews({ news: [article] }, "VALE3")).toEqual([]);
+    expect(parseYahooNews({ news: [{ ...article, providerPublishTime: undefined }] }, "PETR4")).toEqual([]);
+  });
+  it("only saves event dates returned by Yahoo", () => {
+    expect(parseYahooEvents({ exDividendDate: { raw: 1760000000 } }, "PETR4")).toEqual([{ ticker: "PETR4", data: "2025-10-09", tipo: "data_ex_dividendo", descricao: "Data ex-dividendo · Yahoo Finance" }]);
+    expect(parseYahooEvents(undefined, "PETR4")).toEqual([]);
+  });
+});
 
 describe("public option feed", () => {
   it("preserves quote date and never invents locked fields", () => {
