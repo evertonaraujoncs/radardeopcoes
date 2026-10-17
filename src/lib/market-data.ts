@@ -1,5 +1,5 @@
 export function parseOptionTickers(xml: string) {
-  return [...new Set([...xml.matchAll(/\/opcoes\/bovespa\/([A-Z]{4}\d{1,2})(?:<|\/|\?|$)/g)].map(match => match[1]))].sort();
+  return [...new Set([...xml.matchAll(/\/opcoes\/bovespa\/([A-Z]{4}\d{1,2})(?:<|\/|\?|$)/g)].flatMap(match => match[1] ? [match[1]] : []))].sort();
 }
 
 export function selectedTargets(available: string[], selection: string) {

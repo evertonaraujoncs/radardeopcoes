@@ -41,7 +41,7 @@ export function ColetarDados() {
     <div className="flex w-full items-center gap-2 sm:w-auto">
       <Select value={selected} onValueChange={setSelected} disabled={running || catalog.isPending || catalog.isError}>
         <SelectTrigger aria-label="Ativo para coleta" className="w-36 shrink-0 bg-background"><SelectValue placeholder="Ativo" /></SelectTrigger>
-        <SelectContent><SelectItem value="all">Todos</SelectItem>{catalog.data?.map(ticker => <SelectItem key={ticker} value={ticker}>{ticker}</SelectItem>)}</SelectContent>
+        <SelectContent className="max-h-80"><SelectItem value="all">Todos</SelectItem>{catalog.data?.map(ticker => <SelectItem key={ticker} value={ticker}>{ticker}</SelectItem>)}</SelectContent>
       </Select>
       <Button onClick={start} disabled={running || catalog.isPending || catalog.isError} className="min-w-0 flex-1">{running ? <LoaderCircle className="animate-spin" /> : <Download />}{running ? "Coletando…" : "Coletar dados"}</Button>
     </div>
