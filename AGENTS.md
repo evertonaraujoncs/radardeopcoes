@@ -14,3 +14,5 @@
 - Payoff calculations and labels use lots of 100 units, with contract premiums displayed per unit, to keep chart and structure units consistent.
 - Manual market collection is available to authenticated users only for registered, readable tickers; server-owned fetching controls all shared writes, never accepting submitted prices or arbitrary URLs.
 - Collection preserves provider quote timestamps and reports partial coverage; stored price snapshots must never refresh signal scores or imply recalculation of the external engine.
+- Discover the options universe from the provider sitemap and register server-owned ticker rows before exposing authenticated readable collection targets; this prevents a guessed ticker catalog and client-submitted market writes.
+- Yahoo news ingestion requires explicit related-ticker attribution and provider publication dates; unavailable calendars remain coverage failures, not invented dates or an assertion that no events exist.
