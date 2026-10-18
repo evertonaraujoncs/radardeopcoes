@@ -215,13 +215,13 @@ export function analisarPayoff(pernas: Perna[]) {
   const slope = pernas.filter(p => p.tipo === "CALL" || p.tipo === "ACAO").reduce((s, p) => s + p.lado * p.qtd, 0);
   const bes = new Set<number>();
   for (let i = 0; i < ks.length - 1; i++) {
-    const a = ks[i], b = ks[i + 1], fa = vals[i], fb = vals[i + 1];
+    const a = ks[i]!, b = ks[i + 1]!, fa = vals[i]!, fb = vals[i + 1]!;
     if (fa * fb < 0) bes.add(round6(a - fa * (b - a) / (fb - fa)));
   }
-  ks.forEach((k, i) => { if (k > 0 && Math.abs(vals[i]) < 1e-12) bes.add(round6(k)); });
+  ks.forEach((k, i) => { if (k > 0 && Math.abs(vals[i]!) < 1e-12) bes.add(round6(k)); });
   if (slope !== 0) {
-    const root = ks[ks.length - 1] - vals[vals.length - 1] / slope;
-    if (root > ks[ks.length - 1] + 1e-9) bes.add(round6(root));
+    const root = ks[ks.length - 1]! - vals[vals.length - 1]! / slope;
+    if (root > ks[ks.length - 1]! + 1e-9) bes.add(round6(root));
   }
   return {
     lucro_max: slope <= 0 ? Math.max(...vals) : null,
@@ -244,7 +244,7 @@ export function probLucro(pernas: Perna[], S0: number, sigma: number, T: number,
   const pts = [0, ...[...bes].sort((a, b) => a - b), Infinity];
   let p = 0;
   for (let i = 0; i < pts.length - 1; i++) {
-    const lo = pts[i], hi = pts[i + 1];
+    const lo = pts[i]!, hi = pts[i + 1]!;
     const mid = hi === Infinity ? lo + Math.max(1, lo * 0.1) : (lo + hi) / 2;
     if (pnl(pernas, mid) > 0) p += cdf(hi) - cdf(lo);
   }
@@ -326,7 +326,7 @@ export function prepararOpcoes(linhas: LinhaGrade[], S0: number, hoje: Date, r: 
     const iv = ivImplicita(mid, S0, K, T, r, q, tipo) ?? normIv(l.iv);
     if (iv === null) continue;
     out.push({
-      ticker: l.ticker, tipo, strike: K, vencimento, vencimentoStr: String(l.vencimento).slice(0, 10),
+      ticker: l.ticker, tipo, strike: K, vencimento: venc, vencimentoStr: String(l.vencimento).slice(0, 10),
       dias, du, T, bid: bid!, ask: ask!, negocios: neg, spread_pct: spread, sem_bid_ask: sem, iv,
       greeks: bsGregas(S0, K, T, r, q, iv, tipo),
     });
@@ -359,7 +359,8 @@ export function* gerarEstruturas(ativo: string, S0: number, opcoes: Opcao[], ati
     const P = lst.filter(o => o.tipo === "PUT").sort((a, b) => a.strike - b.strike);
     const pares = function* (L: Opcao[]) {
       for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) {
-        if (L[j].strike - L[i].strike > 0 && L[j].strike - L[i].strike <= LARGURA_MAX * S0) yield [L[i], L[j]] as [Opcao, Opcao];
+        const x = L[i]!, y = L[j]!;
+        if (y.strike - x.strike > 0 && y.strike - x.strike <= LARGURA_MAX * S0) yield [x, y] as [Opcao, Opcao];
       }
     };
     if (ativas.has("venda_put"))
@@ -425,7 +426,7 @@ export function avaliar(ativo: string, S0: number, estrategia: EstrategiaKey, ve
   if (params.capital && risco * LOTE > params.capital * params.risco_max_pct / 100) return null;
   const opts = pernas.filter(p => p.tipo !== "ACAO");
   const sigma = opts.reduce((s, p) => s + p.iv!, 0) / opts.length;
-  const T = opts[0].T!, du = opts[0].du!;
+  const T = opts[0]!.T!;
   const pop = probLucro(pernas, S0, sigma, T, r, q, an.breakevens);
   if (pop < params.prob_lucro_min) return null;
   const ror = an.lucro_max !== null ? an.lucro_max / risco : null;
@@ -472,7 +473,7 @@ export function avaliar(ativo: string, S0: number, estrategia: EstrategiaKey, ve
   const cd = -opts.reduce((s, p) => s + p.lado * p.qtd * p.preco, 0);
   return {
     chave: "", ticker: ativo, estrategia, nome: est.nome, vencimento: vencStr,
-    dias_vencimento: opts[0].dias!, preco_ativo: S0, credito_debito: cd * LOTE,
+    dias_vencimento: opts[0]!.dias!, preco_ativo: S0, credito_debito: cd * LOTE,
     lucro_max: an.lucro_max === null ? null : an.lucro_max * LOTE,
     perda_max: an.perda_max * LOTE,
     breakevens: an.breakevens.map(b => r2(b)),
@@ -550,12 +551,12 @@ export function ivRankSerie(rows: { data_coleta: string; iv: number | null; delt
   if (serie.length < 20) return null;
   const vals = serie.map(([, v]) => v);
   const lo = Math.min(...vals), hi = Math.max(...vals);
-  return hi > lo ? (vals[vals.length - 1] - lo) / (hi - lo) : 0.5;
+  return hi > lo ? (vals[vals.length - 1]! - lo) / (hi - lo) : 0.5;
 }
 function mediana(v: number[]): number {
   const s = [...v].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+  return s.length % 2 ? s[m]! : (s[m - 1]! + s[m]!) / 2;
 }
 
 // --------------------------------------------------------------------------
