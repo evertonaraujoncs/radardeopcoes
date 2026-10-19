@@ -6,16 +6,22 @@ import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEG
 
 const DEFASAGEM_DIAS = 4;
 
-async function obterCdi(): Promise<number> {
-  const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(30000) });
-  if (!response.ok) throw new Error(`CDI: HTTP ${response.status}`);
-  const text = await response.text();
-  let rows: { valor: string }[];
-  try { rows = JSON.parse(text); } catch { throw new Error("CDI: resposta inesperada do Banco Central"); }
-  const last = Array.isArray(rows) ? rows[rows.length - 1] : undefined;
-  const v = Number(last?.valor?.replace(",", "."));
-  if (!Number.isFinite(v) || v <= 0) throw new Error("CDI indisponível no Banco Central");
-  return v / 100;
+const CDI_REFERENCIA = 0.15; // usada quando o Banco Central está indisponível
+
+async function obterCdi(): Promise<{ cdi: number; estimado: boolean }> {
+  const manual = Number(process.env["CDI_ANUAL"]);
+  if (Number.isFinite(manual) && manual > 0) return { cdi: manual > 1 ? manual / 100 : manual, estimado: false };
+  try {
+    const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const rows = JSON.parse(await response.text()) as { valor: string }[];
+    const last = Array.isArray(rows) ? rows[rows.length - 1] : undefined;
+    const v = Number(last?.valor?.replace(",", "."));
+    if (!Number.isFinite(v) || v <= 0) throw new Error("valor ausente");
+    return { cdi: v / 100, estimado: false };
+  } catch {
+    return { cdi: CDI_REFERENCIA, estimado: true };
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
