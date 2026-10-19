@@ -9,7 +9,9 @@ const DEFASAGEM_DIAS = 4;
 async function obterCdi(): Promise<number> {
   const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`CDI: HTTP ${response.status}`);
-  const rows = await response.json() as { valor: string }[];
+  const text = await response.text();
+  let rows: { valor: string }[];
+  try { rows = JSON.parse(text); } catch { throw new Error("CDI: resposta inesperada do Banco Central"); }
   const last = Array.isArray(rows) ? rows[rows.length - 1] : undefined;
   const v = Number(last?.valor?.replace(",", "."));
   if (!Number.isFinite(v) || v <= 0) throw new Error("CDI indisponível no Banco Central");
