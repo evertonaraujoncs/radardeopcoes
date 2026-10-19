@@ -112,8 +112,8 @@ describe("alertas e IV Rank", () => {
     ]);
     const base = { nome: "Teste", ticker: "PETR4", vencimento: "2026-11-16", prob_lucro: 0.7, riscos: [], dias_ate_evento: null };
     const nv = new Map<string, Sinal>([
-      ["a", { ...base, score: 75 } as Sinal],
-      ["c", { ...base, score: 72 } as Sinal],
+      ["a", { ...base, score: 75 } as unknown as Sinal],
+      ["c", { ...base, score: 72 } as unknown as Sinal],
     ]);
     const { alertas, encerrar } = calcularAlertas(ex, nv);
     expect(alertas.map(a => a.tipo).sort()).toEqual(["encerrado", "novo", "score_subiu"]);
