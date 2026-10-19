@@ -10,7 +10,8 @@ async function obterCdi(): Promise<number> {
   const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error(`CDI: HTTP ${response.status}`);
   const rows = await response.json() as { valor: string }[];
-  const v = Number(rows.at(-1)?.valor.replace(",", "."));
+  const last = Array.isArray(rows) ? rows[rows.length - 1] : undefined;
+  const v = Number(last?.valor?.replace(",", "."));
   if (!Number.isFinite(v) || v <= 0) throw new Error("CDI indisponível no Banco Central");
   return v / 100;
 }
