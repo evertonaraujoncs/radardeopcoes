@@ -7,7 +7,7 @@ import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEG
 const DEFASAGEM_DIAS = 4;
 
 async function obterCdi(): Promise<number> {
-  const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(15000) });
+  const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`CDI: HTTP ${response.status}`);
   const rows = await response.json() as { valor: string }[];
   const last = Array.isArray(rows) ? rows[rows.length - 1] : undefined;
