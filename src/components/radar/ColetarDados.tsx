@@ -30,7 +30,7 @@ export function ColetarDados() {
         setProgress(`${ticker} · ${i + 1}/${tickers.length}`);
         try {
           const result = await collect({ data: { ticker } });
-          setResults(previous => [...previous, `${ticker}: ${result.historyCount} pregões, ${result.optionsCount} opções, ${result.newsCount} notícias e ${result.eventsCount} eventos salvos.${result.warnings.length ? ` ${result.warnings.join("; ")}` : ""}`]);
+          setResults(previous => [...previous, `${ticker}: ${result.historyCount} pregões, ${result.optionsCount} opções, ${result.newsCount} notícias e ${result.eventsCount} eventos salvos, ${result.signalsCount} sinais calculados.${result.warnings.length ? ` ${result.warnings.join("; ")}` : ""}`]);
         } catch (error) { setResults(previous => [...previous, `${ticker}: ${error instanceof Error ? error.message : "Não foi possível coletar."}`]); }
       }
       await qc.invalidateQueries();
@@ -49,7 +49,6 @@ export function ColetarDados() {
     {running && <div className="flex items-center gap-2"><p role="status" className="text-xs text-muted-foreground">{progress}</p><Button variant="ghost" size="sm" onClick={() => { stop.current = true; }}>Interromper</Button></div>}
     {results.length > 0 && <div role="status" className="max-h-64 w-full space-y-1 overflow-y-auto text-xs text-muted-foreground text-right">
       {results.map((result, i) => <p key={i}>{result}</p>)}
-      <p className="text-warn">Recomendações não recalculadas: a fonte gratuita não fornece bid/ask e o motor de sinais ainda não está integrado.</p>
     </div>}
   </div>;
 }

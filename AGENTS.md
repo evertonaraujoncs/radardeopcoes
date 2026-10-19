@@ -16,3 +16,5 @@
 - Collection preserves provider quote timestamps and reports partial coverage; stored price snapshots must never refresh signal scores or imply recalculation of the external engine.
 - Discover the options universe from the provider sitemap and register server-owned ticker rows before exposing authenticated readable collection targets; this prevents a guessed ticker catalog and client-submitted market writes.
 - Yahoo news ingestion requires explicit related-ticker attribution and provider publication dates; unavailable calendars remain coverage failures, not invented dates or an assertion that no events exist.
+
+- Motor de sinais portado de motor_sinais.py para src/lib/signal-engine.ts (lógica pura, testada em signal-engine.test.ts); a orquestração roda em rodarMotor dentro de src/lib/market.functions.ts, acionada ao fim de cada coleta, usando a grade mais recente por opção na janela de 4 dias e CDI do BCB com fallback de 15% estimado.

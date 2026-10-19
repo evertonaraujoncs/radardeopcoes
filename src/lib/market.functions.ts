@@ -6,13 +6,22 @@ import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEG
 
 const DEFASAGEM_DIAS = 4;
 
-async function obterCdi(): Promise<number> {
-  const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(15000) });
-  if (!response.ok) throw new Error(`CDI: HTTP ${response.status}`);
-  const rows = await response.json() as { valor: string }[];
-  const v = Number(rows.at(-1)?.valor.replace(",", "."));
-  if (!Number.isFinite(v) || v <= 0) throw new Error("CDI indisponível no Banco Central");
-  return v / 100;
+const CDI_REFERENCIA = 0.15; // usada quando o Banco Central está indisponível
+
+async function obterCdi(): Promise<{ cdi: number; estimado: boolean }> {
+  const manual = Number(process.env["CDI_ANUAL"]);
+  if (Number.isFinite(manual) && manual > 0) return { cdi: manual > 1 ? manual / 100 : manual, estimado: false };
+  try {
+    const response = await fetch("https://api.bcb.gov.br/dados/serie/bcdata.sgs.4389/dados/ultimos/1?formato=json", { signal: AbortSignal.timeout(30000) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const rows = JSON.parse(await response.text()) as { valor: string }[];
+    const last = Array.isArray(rows) ? rows[rows.length - 1] : undefined;
+    const v = Number(last?.valor?.replace(",", "."));
+    if (!Number.isFinite(v) || v <= 0) throw new Error("valor ausente");
+    return { cdi: v / 100, estimado: false };
+  } catch {
+    return { cdi: CDI_REFERENCIA, estimado: true };
+  }
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -61,7 +70,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     datas_balanco: ((evs.data ?? []) as { data: string; tipo: string }[]).filter(e => ["balanco", "resultados"].includes(e.tipo)).map(e => new Date(`${e.data}T00:00:00Z`)),
     ivr: ivRankSerie(hist.data ?? []),
   };
-  const r = Math.log(1 + cdi);
+  const r = Math.log(1 + cdi.cdi);
   const sinais = await gerarSinais(ticker, S0, [...ultimas.values()], ctx, params, hoje, r);
 
   const agora = new Date().toISOString();
@@ -90,7 +99,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const a = await db.from("alertas").insert(novosAlertas);
     if (a.error) throw new Error(a.error.message);
   }
-  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")) };
+  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")) };
 }
 
 async function optionCatalog() {
@@ -204,7 +213,7 @@ export const collectMarket = createServerFn({ method: "POST" })
     try {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
-      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%)${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
+      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""})${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
     const notes = `${motorNota} Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
