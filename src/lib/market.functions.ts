@@ -213,7 +213,7 @@ export const collectMarket = createServerFn({ method: "POST" })
     try {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
-      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%)${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
+      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""})${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
     const notes = `${motorNota} Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
