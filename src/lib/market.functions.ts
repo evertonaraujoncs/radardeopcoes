@@ -70,7 +70,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     datas_balanco: ((evs.data ?? []) as { data: string; tipo: string }[]).filter(e => ["balanco", "resultados"].includes(e.tipo)).map(e => new Date(`${e.data}T00:00:00Z`)),
     ivr: ivRankSerie(hist.data ?? []),
   };
-  const r = Math.log(1 + cdi);
+  const r = Math.log(1 + cdi.cdi);
   const sinais = await gerarSinais(ticker, S0, [...ultimas.values()], ctx, params, hoje, r);
 
   const agora = new Date().toISOString();
@@ -99,7 +99,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const a = await db.from("alertas").insert(novosAlertas);
     if (a.error) throw new Error(a.error.message);
   }
-  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")) };
+  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")) };
 }
 
 async function optionCatalog() {
