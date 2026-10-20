@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOptions, parseOptionTickers, selectedTargets, parseYahooNews, parseYahooEvents } from "./market-data";
+import { parseOptions, validateOptionGrid, parseOptionTickers, selectedTargets, parseYahooNews, parseYahooEvents } from "./market-data";
 
 describe("collection selection", () => {
   it("collects only the selected ticker", () => {
@@ -35,5 +35,14 @@ describe("public option feed", () => {
   });
   it("rejects malformed rows and unavailable quote timestamps", () => {
     expect(parseOptions([null, [], ["CODE", "", "PUT", "E", "OTM", 30, 0, 0, 1, 1, 1, "—"]], "PETR4", "2026-10-16", "now")).toEqual([]);
+  });
+  it("rejects the wrong asset instead of importing a page's default ticker", () => {
+    expect(parseOptions([["VALEJ123", "", "CALL", "", "", 30, 0, 0, 1, 10, 100, "2026-10-15"]], "PETR4", "2026-11-20", "now")).toEqual([]);
+  });
+  it("requires at least five rows and 90% validated rows before shared writes", () => {
+    const rows = Array.from({ length: 10 }, (_, i) => [`PETRK${100 + i}`, "", "CALL", "", "", 30, 0, 0, 1, 10, 100, "2026-10-15"]);
+    expect(validateOptionGrid(rows, "PETR4", "2026-11-20", "now")).toHaveLength(10);
+    expect(() => validateOptionGrid(rows.slice(0, 4), "PETR4", "2026-11-20", "now")).toThrow();
+    expect(() => validateOptionGrid([...rows.slice(0, 8), null, null], "PETR4", "2026-11-20", "now")).toThrow();
   });
 });

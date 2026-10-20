@@ -28,17 +28,24 @@ export function parseYahooEvents(calendar: unknown, ticker: string) {
 
 export function parseOptions(rows: unknown[], ticker: string, expiry: string, _collectedAt: string) {
   return rows.flatMap((row) => {
-    if (!Array.isArray(row) || typeof row[0] !== "string" || !["CALL", "PUT"].includes(row[2]) || typeof row[5] !== "number") return [];
+    if (!Array.isArray(row) || typeof row[0] !== "string" || !["CALL", "PUT"].includes(row[2]) || typeof row[5] !== "number" || !Number.isFinite(row[5]) || row[5] <= 0) return [];
     const tradeDate = typeof row[11] === "string" ? row[11] : "";
     const date = /^\d{4}-\d{2}-\d{2}$/.test(tradeDate) ? `${tradeDate}T00:00:00-03:00` : tradeDate;
     // Never present retrieval time as the original option quote time.
     if (!date || !Number.isFinite(Date.parse(date))) return [];
     const code = row[0].split("_")[0];
-    if (!code) return [];
+    if (!code || !/^[A-Z0-9]{4}[A-X]\d{1,4}(W\d|E)?$/.test(code) || code.slice(0, 4) !== ticker.slice(0, 4)) return [];
     return [{ ticker: code, ativo: ticker, ativo_base: ticker, tipo: row[2] as string,
       strike: row[5] as number, ultimo: typeof row[8] === "number" ? row[8] : null,
       negocios: typeof row[9] === "number" ? row[9] : null,
       volume: typeof row[10] === "number" ? row[10] : null,
       vencimento: expiry, data_coleta: new Date(date).toISOString(), bid: null, ask: null, iv: null, delta: null }];
   });
+}
+
+// Reject broken/misattributed grids before any shared write or signal calculation.
+export function validateOptionGrid(rows: unknown[], ticker: string, expiry: string, collectedAt: string) {
+  const parsed = parseOptions(rows, ticker, expiry, collectedAt);
+  if (rows.length < 5 || parsed.length < rows.length * 0.9) throw new Error("Grade reprovada: poucas linhas válidas, campos alterados ou ativo/data de cotação não confirmados.");
+  return [...new Map(parsed.map(row => [row.ticker, row])).values()];
 }
