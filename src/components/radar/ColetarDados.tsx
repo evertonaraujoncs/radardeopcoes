@@ -17,11 +17,19 @@ export function ColetarDados() {
   const stop = useRef(false);
   const [progress, setProgress] = useState("");
   const [results, setResults] = useState<string[]>([]);
+  async function waitUntil(until: string | undefined, ticker: string) {
+    const end = until ? Date.parse(until) : Date.now();
+    while (!stop.current && Date.now() < end) {
+      setProgress(`${ticker} · aguardando ${Math.ceil((end - Date.now()) / 1000)}s`);
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+    return !stop.current;
+  }
   async function start() {
     stop.current = false;
     setRunning(true); setResults([]);
     try {
-      const available = await targets();
+      const available = catalog.data ?? await targets();
       const tickers = selectedTargets(available, selected);
       if (!tickers.length) { setResults(["Nenhum ativo cadastrado para coleta."]); return; }
       for (let i = 0; i < tickers.length; i++) {
@@ -29,8 +37,34 @@ export function ColetarDados() {
         const ticker = tickers[i];
         setProgress(`${ticker} · ${i + 1}/${tickers.length}`);
         try {
-          const result = await collect({ data: { ticker } });
-          setResults(previous => [...previous, `${ticker}: ${result.historyCount} pregões, ${result.optionsCount} opções, ${result.newsCount} notícias e ${result.eventsCount} eventos salvos, ${result.signalsCount} sinais calculados.${result.warnings.length ? ` ${result.warnings.join("; ")}` : ""}`]);
+          if (!ticker) continue;
+          let optionsOnly = false;
+          while (!stop.current) {
+            const result = await collect({ data: { ticker, optionsOnly } });
+            if (result.schedule.kind === "recent") {
+              setResults(previous => [...previous, `${ticker}: coleta de opções já concluída nas últimas 4 horas; dados preservados.`]);
+              break;
+            }
+            if (result.schedule.kind === "wait") {
+              if (result.circuit) {
+                setResults(previous => [...previous, `Coleta interrompida por bloqueios da fonte. Disponível após ${result.nextAt ? new Date(result.nextAt).toLocaleString("pt-BR") : "a pausa"}; dados salvos preservados.`]);
+                stop.current = true;
+                break;
+              }
+              if (!(await waitUntil(result.nextAt, ticker))) break;
+              continue;
+            }
+            setResults(previous => [...previous, `${ticker}: ${result.historyCount} pregões, ${result.optionsCount} opções, ${result.newsCount} notícias e ${result.eventsCount} eventos salvos, ${result.signalsCount} sinais calculados.${result.warnings.length ? ` ${result.warnings.join("; ")}` : ""}`]);
+            await qc.invalidateQueries();
+            if (result.circuit) {
+              setResults(previous => [...previous, `Coleta interrompida após bloqueios consecutivos. Tente após ${result.nextAt ? new Date(result.nextAt).toLocaleString("pt-BR") : "a pausa"}.`]);
+              stop.current = true;
+              break;
+            }
+            if (!result.retry) break;
+            optionsOnly = true;
+            if (!(await waitUntil(result.nextAt, ticker))) break;
+          }
         } catch (error) { setResults(previous => [...previous, `${ticker}: ${error instanceof Error ? error.message : "Não foi possível coletar."}`]); }
       }
       await qc.invalidateQueries();

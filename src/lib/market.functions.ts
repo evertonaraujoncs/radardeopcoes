@@ -1,7 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { parseOptions, parseOptionTickers, parseYahooNews, parseYahooEvents } from "./market-data";
+import { validateOptionGrid, parseOptionTickers, parseYahooNews, parseYahooEvents } from "./market-data";
+import { providerBlocked, retryAfterSeconds, readSchedule } from "./collection-policy";
 import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
 const DEFASAGEM_DIAS = 4;
@@ -125,7 +126,7 @@ export const collectionTargets = createServerFn({ method: "POST" })
 
 export const collectMarket = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: unknown) => z.object({ ticker: z.string().regex(/^[A-Z]{4}\d{1,2}$/) }).parse(input))
+  .inputValidator((input: unknown) => z.object({ ticker: z.string().regex(/^[A-Z]{4}\d{1,2}$/), optionsOnly: z.boolean().optional() }).parse(input))
   .handler(async ({ data, context }) => {
     // Only collect registered, user-readable assets; no arbitrary URLs or submitted market values.
     const [asset, signal] = await Promise.all([
@@ -141,12 +142,32 @@ export const collectMarket = createServerFn({ method: "POST" })
     let newsCount = 0;
     let eventsCount = 0;
     const now = new Date().toISOString();
+    const reservation = await db.rpc("claim_options_collection", { p_ticker: ticker });
+    if (reservation.error) throw new Error("Não foi possível reservar a coleta. Nenhuma consulta foi enviada à fonte.");
+    const schedule = readSchedule(reservation.data);
+    if (schedule.kind !== "ready") return { ticker, signalsCount: 0, historyCount, optionsCount, newsCount, eventsCount, warnings: [], notes: "", schedule, retry: false, circuit: schedule.circuit ?? false, nextAt: schedule.until };
+    const token = schedule.token;
+    if (!token) throw new Error("Reserva da coleta indisponível.");
+    let blocked = false;
+    let retrySeconds = 0;
+    let outcome = "error";
+    const optionsJson = async (url: string) => {
+      const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json", "Referer": "https://opcoes.net.br/opcoes/bovespa" }, signal: AbortSignal.timeout(20000) });
+      const text = await response.text();
+      if (providerBlocked(response.status, text)) {
+        blocked = true;
+        retrySeconds = retryAfterSeconds(response.headers.get("Retry-After"));
+        throw new Error("A fonte limitou as consultas; novas tentativas respeitarão a pausa indicada.");
+      }
+      if (!response.ok) throw new Error(`Fonte retornou HTTP ${response.status}`);
+      return JSON.parse(text);
+    };
     const json = async (url: string) => {
       const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20000) });
       if (!response.ok) throw new Error(`Fonte retornou HTTP ${response.status}`);
       return response.json();
     };
-    try {
+    try { if (!data.optionsOnly) {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.SA?range=1y&interval=1d`;
       const payload = await json(url);
       const result = payload.chart?.result?.[0];
@@ -156,17 +177,18 @@ export const collectMarket = createServerFn({ method: "POST" })
       const { error } = await db.from("ativos").upsert({ ticker, nome: result.meta.longName ?? result.meta.shortName ?? ticker, preco: result.meta.regularMarketPrice, atualizado_em: new Date(result.meta.regularMarketTime * 1000).toISOString(), historico_precos: history, fonte_preco: url }, { onConflict: "ticker" });
       if (error) throw error;
       historyCount = history.length;
+    }
     } catch (error) { warnings.push(`Cotações: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     try {
       const base = `https://opcoes.net.br/listaopcoes/completa?idAcao=${ticker}`;
-      const expiries = await json(`${base}&listarVencimentos=true&cotacoes=false`);
+       const expiries = await optionsJson(`${base}&listarVencimentos=true&cotacoes=false`);
       if (expiries.success !== true || !Array.isArray(expiries.data?.vencimentos)) throw new Error("Vencimentos indisponíveis");
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
       const selected = expiries.data.vencimentos.filter((v: { value: string }) => /^\d{4}-\d{2}-\d{2}$/.test(v.value) && v.value >= today).slice(0, 3);
       for (const expiry of selected) {
-        const payload = await json(`${base}&listarVencimentos=false&cotacoes=true&vencimentos=${expiry.value}`);
+        const payload = await optionsJson(`${base}&listarVencimentos=false&cotacoes=true&vencimentos=${expiry.value}`);
         if (payload.success !== true || !Array.isArray(payload.data?.cotacoesOpcoes)) throw new Error("Grade indisponível");
-        const rows = parseOptions(payload.data.cotacoesOpcoes, ticker, expiry.value, now);
+        const rows = validateOptionGrid(payload.data.cotacoesOpcoes, ticker, expiry.value, now);
         const { data: existing, error: readError } = await db.from("opcoes_grade").select("ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry.value);
         if (readError) throw readError;
         const keys = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
@@ -183,8 +205,12 @@ export const collectMarket = createServerFn({ method: "POST" })
         }
       }
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
+      if (selected.length) outcome = "success";
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
-    try {
+    const finished = await db.rpc("finish_options_collection", { p_ticker: ticker, p_token: token, p_outcome: blocked ? "blocked" : outcome, p_retry_seconds: retrySeconds });
+    if (finished.error) throw new Error("Não foi possível registrar a pausa da coleta; aguarde cinco minutos antes de tentar novamente.");
+    const finishData = finished.data as { until?: string; retry?: boolean; circuit?: boolean } | null;
+    try { if (!data.optionsOnly) {
       const payload = await json(`https://query1.finance.yahoo.com/v1/finance/search?q=${ticker}.SA&newsCount=20&quotesCount=0`);
       const rows = parseYahooNews(payload, ticker);
       const existing = await db.from("noticias").select("url").eq("ticker", ticker);
@@ -194,8 +220,9 @@ export const collectMarket = createServerFn({ method: "POST" })
       if (fresh.length) { const saved = await db.from("noticias").insert(fresh); if (saved.error) throw saved.error; }
       newsCount = fresh.length;
       if (!rows.length) warnings.push("Notícias: Yahoo não retornou notícias vinculadas a este ticker; cobertura não confirmada.");
+    }
     } catch (error) { warnings.push(`Notícias Yahoo: ${error instanceof Error ? error.message : "falha na coleta"}`); }
-    try {
+    try { if (!data.optionsOnly) {
       const payload = await json(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/${ticker}.SA?modules=calendarEvents`);
       const calendar = payload.quoteSummary?.result?.[0]?.calendarEvents;
       if (!calendar) throw new Error("Calendário não disponibilizado pela fonte");
@@ -207,16 +234,20 @@ export const collectMarket = createServerFn({ method: "POST" })
       if (fresh.length) { const saved = await db.from("eventos").insert(fresh); if (saved.error) throw saved.error; }
       eventsCount = fresh.length;
       if (!rows.length) warnings.push("Eventos: Yahoo não retornou datas; cobertura não confirmada.");
+    }
     } catch (error) { warnings.push(`Eventos Yahoo: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     let signalsCount = 0;
     let motorNota = "";
-    try {
+    try { if (!blocked && outcome === "success") {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
       motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""})${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
+    } else {
+      motorNota = "Motor preservado: sinais existentes não foram recalculados ou encerrados sem uma grade validada nesta coleta.";
+    }
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
     const notes = `${motorNota} Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
-    return { ticker, signalsCount, historyCount, optionsCount, newsCount, eventsCount, warnings, notes };
+    return { ticker, signalsCount, historyCount, optionsCount, newsCount, eventsCount, warnings, notes, schedule, retry: finishData?.retry ?? false, circuit: finishData?.circuit ?? false, nextAt: finishData?.until };
   });
