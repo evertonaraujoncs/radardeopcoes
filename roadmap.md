@@ -5,6 +5,7 @@
 - [x] Verificar o sinal autenticado e esclarecer a cobertura real dos dados de mercado: tabelas vazias, nenhuma coleta histórica ampla comprovada.
 
 ## Coleta manual
+- [ ] Adaptar as proteções e validações do coletor Python enviado à coleta dentro do app; verificar bloqueios, persistência e coleta autenticada.
 - [x] Conectar coleta real de fontes públicas dentro do app e adicionar botão no Radar (Yahoo Finance e opcoes.net.br).
 - [x] Verificar coleta autenticada, persistência e limitações de cobertura.
 - [x] Selecionar ticker com opções na B3 ou Todos e persistir a coleta correspondente; teste autenticado de VALE3 salvou 247 pregões e 200 opções, e Todos foi validado por teste de seleção.
