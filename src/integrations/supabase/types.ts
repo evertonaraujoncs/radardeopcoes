@@ -163,6 +163,39 @@ export type Database = {
         }
         Relationships: []
       }
+      market_collection_guard: {
+        Row: {
+          attempts: number
+          cooldown_level: number
+          failed_assets: number
+          key: string
+          last_success: string | null
+          lease_id: string | null
+          lease_until: string
+          next_at: string
+        }
+        Insert: {
+          attempts?: number
+          cooldown_level?: number
+          failed_assets?: number
+          key: string
+          last_success?: string | null
+          lease_id?: string | null
+          lease_until?: string
+          next_at?: string
+        }
+        Update: {
+          attempts?: number
+          cooldown_level?: number
+          failed_assets?: number
+          key?: string
+          last_success?: string | null
+          lease_id?: string | null
+          lease_until?: string
+          next_at?: string
+        }
+        Relationships: []
+      }
       noticias: {
         Row: {
           fonte: string | null
@@ -437,7 +470,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      claim_options_collection: { Args: { p_ticker: string }; Returns: Json }
+      finish_options_collection: {
+        Args: {
+          p_outcome: string
+          p_retry_seconds?: number
+          p_ticker: string
+          p_token: string
+        }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never

@@ -22,6 +22,13 @@
       "when": 1792121717968,
       "tag": "0002_rls_require_signed_in",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792460185051,
+      "tag": "0003_market_collection_guard",
+      "breakpoints": true
     }
   ]
 }
