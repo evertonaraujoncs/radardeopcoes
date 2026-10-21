@@ -30,6 +30,7 @@ export const corValor = (v: number | null | undefined) =>
   v == null || Number(v) === 0 ? "text-foreground" : Number(v) > 0 ? "text-gain" : "text-loss";
 
 export const ESTRATEGIAS: Record<string, string> = {
+  compra_call: "Compra de call a seco",
   venda_put: "Venda de put garantida",
   lancamento_coberto: "Lançamento coberto",
   collar: "Collar",
@@ -42,6 +43,7 @@ export const ESTRATEGIAS: Record<string, string> = {
 export const nomeEstrategia = (k: string) => ESTRATEGIAS[k] ?? k.replace(/_/g, " ");
 
 export const RISCOS: Record<string, string> = {
+  perda_total_premio: "Pode perder todo o prêmio pago",
   dividendo_antes_vencimento: "Dividendo antes do vencimento",
   balanco_antes_vencimento: "Balanço antes do vencimento",
   preco_sem_bid_ask: "Preço sem bid/ask",
