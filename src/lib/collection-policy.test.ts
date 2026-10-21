@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pauseMilliseconds, retryMilliseconds, retryAfterSeconds, providerBlocked, readSchedule, COLLECTION_POLICY } from "./collection-policy";
+import { pauseMilliseconds, retryMilliseconds, retryAfterSeconds, providerBlocked, readSchedule, canRecalculateSignals, COLLECTION_POLICY } from "./collection-policy";
 
 describe("uploaded scraper protections", () => {
   it("paces assets at 21–39 seconds around the script's 30-second pause", () => {
@@ -31,5 +31,10 @@ describe("uploaded scraper protections", () => {
   it("fails closed when a server reservation is missing", () => {
     expect(() => readSchedule({ kind: "ready" })).toThrow();
     expect(readSchedule({ kind: "ready", token: "lease" }).token).toBe("lease");
+  });
+  it("never recalculates or closes signals from blocked or invalid grids", () => {
+    expect(canRecalculateSignals(true, "success")).toBe(false);
+    expect(canRecalculateSignals(false, "error")).toBe(false);
+    expect(canRecalculateSignals(false, "success")).toBe(true);
   });
 });

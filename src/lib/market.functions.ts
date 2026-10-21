@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { validateOptionGrid, parseOptionTickers, parseYahooNews, parseYahooEvents } from "./market-data";
-import { providerBlocked, retryAfterSeconds, readSchedule } from "./collection-policy";
+import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
 import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
 const DEFASAGEM_DIAS = 4;
@@ -241,7 +241,7 @@ export const collectMarket = createServerFn({ method: "POST" })
     } catch (error) { warnings.push(`Eventos Yahoo: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     let signalsCount = 0;
     let motorNota = "";
-    try { if (!blocked && outcome === "success") {
+    try { if (canRecalculateSignals(blocked, outcome)) {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
       motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""})${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
