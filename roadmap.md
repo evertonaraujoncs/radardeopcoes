@@ -5,6 +5,9 @@
 - [x] Verificar o sinal autenticado e esclarecer a cobertura real dos dados de mercado: tabelas vazias, nenhuma coleta histórica ampla comprovada.
 
 ## Coleta manual
+- [ ] Adicionar seleção dos 20 ativos mais líquidos com ranking verificável.
+- [ ] Disponibilizar compra de call a seco nos parâmetros e no motor, com testes de risco e payoff.
+- [ ] Verificar campos de bid/ask e gregas públicos de opcoes.net.br e integrar somente dados reais acessíveis.
 - [x] Adaptar proteções do coletor enviado: pausas compartilhadas, 4 tentativas com Retry-After, intervalo de 4h e disjuntor persistente; validação por ativo/data sem inventar cotações. Coleta autenticada PETR4 salvou 129 opções; repetição foi impedida. Python/Chromium e reparo por IA não executados no app; notícias/eventos continuam bloqueados pela cobertura Yahoo.
 - [x] Conectar coleta real de fontes públicas dentro do app e adicionar botão no Radar (Yahoo Finance e opcoes.net.br).
 - [x] Verificar coleta autenticada, persistência e limitações de cobertura.

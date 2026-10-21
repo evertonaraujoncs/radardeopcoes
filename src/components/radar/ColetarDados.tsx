@@ -4,12 +4,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { collectionTargets, collectMarket } from "@/lib/market.functions";
+import { collectionTargets, collectMarket, liquidCollectionTargets } from "@/lib/market.functions";
 import { selectedTargets } from "@/lib/market-data";
 
 export function ColetarDados() {
   const targets = useServerFn(collectionTargets);
   const collect = useServerFn(collectMarket);
+  const liquidTargets = useServerFn(liquidCollectionTargets);
   const qc = useQueryClient();
   const catalog = useQuery({ queryKey: ["collection-targets"], queryFn: () => targets(), staleTime: 30 * 60 * 1000 });
   const [selected, setSelected] = useState("all");
@@ -30,7 +31,14 @@ export function ColetarDados() {
     setRunning(true); setResults([]);
     try {
       const available = catalog.data ?? await targets();
-      const tickers = selectedTargets(available, selected);
+      let liquid: string[] = [];
+      if (selected === "top20") {
+        setProgress("Consultando os 20 mais líquidos…");
+        const ranking = await liquidTargets();
+        liquid = ranking.tickers;
+        setResults([`20 mais líquidos · ${ranking.source} · ${ranking.metric}. Ativos: ${liquid.join(", ")}.`]);
+      }
+      const tickers = selectedTargets(available, selected, liquid);
       if (!tickers.length) { setResults(["Nenhum ativo cadastrado para coleta."]); return; }
       for (let i = 0; i < tickers.length; i++) {
         if (stop.current) { setResults(previous => [...previous, "Coleta interrompida; dados já salvos foram preservados."]); break; }
@@ -74,8 +82,8 @@ export function ColetarDados() {
   return <div className="flex w-full flex-col items-end gap-2 sm:w-auto sm:max-w-xl">
     <div className="flex w-full items-center gap-2 sm:w-auto">
       <Select value={selected} onValueChange={setSelected} disabled={running || catalog.isPending || catalog.isError}>
-        <SelectTrigger aria-label="Ativo para coleta" className="w-36 shrink-0 bg-background"><SelectValue placeholder="Ativo" /></SelectTrigger>
-        <SelectContent className="max-h-80"><SelectItem value="all">Todos</SelectItem>{catalog.data?.map(ticker => <SelectItem key={ticker} value={ticker}>{ticker}</SelectItem>)}</SelectContent>
+        <SelectTrigger aria-label="Ativo para coleta" className="w-44 shrink-0 bg-background"><SelectValue placeholder="Ativo" /></SelectTrigger>
+        <SelectContent className="max-h-80"><SelectItem value="all">Todos</SelectItem><SelectItem value="top20">20 mais líquidos</SelectItem>{catalog.data?.map(ticker => <SelectItem key={ticker} value={ticker}>{ticker}</SelectItem>)}</SelectContent>
       </Select>
       <Button onClick={start} disabled={running || catalog.isPending || catalog.isError} className="min-w-0 flex-1">{running ? <LoaderCircle className="animate-spin" /> : <Download />}{running ? "Coletando…" : "Coletar dados"}</Button>
     </div>

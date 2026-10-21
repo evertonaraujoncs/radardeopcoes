@@ -2,7 +2,23 @@ export function parseOptionTickers(xml: string) {
   return [...new Set([...xml.matchAll(/\/opcoes\/bovespa\/([A-Z]{4}\d{1,2})(?:<|\/|\?|$)/g)].flatMap(match => match[1] ? [match[1]] : []))].sort();
 }
 
-export function selectedTargets(available: string[], selection: string) {
+export function rankLiquidTargets(payload: unknown, available: string[]) {
+  const stocks = (payload as { stocks?: unknown[] } | null)?.stocks;
+  if (!Array.isArray(stocks)) throw new Error("Ranking de liquidez indisponível na fonte.");
+  const allowed = new Set(available);
+  const ranked = new Map<string, number>();
+  for (const item of stocks) {
+    const row = item as { stock?: string; close?: number; volume?: number } | null;
+    if (!row || !row.stock || !allowed.has(row.stock) || typeof row.close !== "number" || typeof row.volume !== "number" || !Number.isFinite(row.close) || !Number.isFinite(row.volume) || row.close <= 0 || row.volume <= 0) continue;
+    ranked.set(row.stock, row.close * row.volume);
+  }
+  const tickers = [...ranked].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 20).map(([ticker]) => ticker);
+  if (tickers.length < 20) throw new Error("A fonte não forneceu volume válido para 20 ativos com opções. Tente novamente ou selecione um ticker.");
+  return tickers;
+}
+
+export function selectedTargets(available: string[], selection: string, liquid: string[] = []) {
+  if (selection === "top20") return [...new Set(liquid)].filter(ticker => available.includes(ticker)).slice(0, 20);
   return selection === "all" ? [...available] : available.filter(ticker => ticker === selection);
 }
 

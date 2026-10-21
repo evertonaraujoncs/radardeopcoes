@@ -25,11 +25,12 @@ export const PESOS = {
 } as const;
 
 export type EstrategiaKey =
-  | "venda_put" | "lancamento_coberto" | "collar"
+  | "compra_call" | "venda_put" | "lancamento_coberto" | "collar"
   | "trava_alta_put" | "trava_baixa_call" | "trava_alta_call" | "trava_baixa_put"
   | "iron_condor";
 
 export const ESTRATEGIAS: Record<EstrategiaKey, { nome: string; vende_premio: boolean; direcao: number; ror_ref: number; risco_modo: "cenario" | "max" }> = {
+  compra_call:        { nome: "Compra de call a seco",    vende_premio: false, direcao: 1, ror_ref: 1.0, risco_modo: "max" },
   venda_put:          { nome: "Venda de put garantida",   vende_premio: true,  direcao: 1,  ror_ref: 0.15, risco_modo: "cenario" },
   lancamento_coberto: { nome: "Lançamento coberto",       vende_premio: true,  direcao: 1,  ror_ref: 0.20, risco_modo: "cenario" },
   collar:             { nome: "Collar",                   vende_premio: false, direcao: 1,  ror_ref: 0.50, risco_modo: "max" },
@@ -363,6 +364,8 @@ export function* gerarEstruturas(ativo: string, S0: number, opcoes: Opcao[], ati
         if (y.strike - x.strike > 0 && y.strike - x.strike <= LARGURA_MAX * S0) yield [x, y] as [Opcao, Opcao];
       }
     };
+    if (ativas.has("compra_call"))
+      for (const c of C) yield ["compra_call", venc, [leg(c, 1)]];
     if (ativas.has("venda_put"))
       for (const p of P) if (0.90 * S0 <= p.strike && p.strike <= S0) yield ["venda_put", venc, [leg(p, -1)]];
     if (ativas.has("lancamento_coberto"))
@@ -441,6 +444,7 @@ export function avaliar(ativo: string, S0: number, estrategia: EstrategiaKey, ve
   const newsC = sent === null || d === 0 ? 0.5 : clamp((sent * d + 1) / 2);
 
   const riscos: string[] = [];
+  if (estrategia === "compra_call") riscos.push("perda_total_premio");
   let pen = 0;
   const prox: number[] = [];
   if (pernas.some(p => p.tipo === "CALL" && p.lado < 0)) {

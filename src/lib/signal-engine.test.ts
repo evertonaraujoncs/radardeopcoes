@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analisarPayoff, bsGregas, bsPreco, calcularAlertas, diasUteis, gerarSinais,
-  ivImplicita, ivRankSerie, pnl, probLucro, PARAMS_PADRAO, type LinhaGrade, type Perna, type Sinal,
+  ivImplicita, ivRankSerie, pnl, probLucro, gerarEstruturas, prepararOpcoes, PARAMS_PADRAO, type LinhaGrade, type Perna, type Sinal,
 } from "./signal-engine";
 
 const S0 = 38, r = Math.log(1.10), q = 0.02, T = 0.12;
@@ -80,6 +80,39 @@ function cadeiaSintetica(hoje: Date, venc: Date): LinhaGrade[] {
 }
 
 describe("geração de sinais", () => {
+  it("compra de call a seco compra uma única call ao ask, com perda limitada ao prêmio de 100 unidades", async () => {
+    const hoje = new Date("2026-10-17T00:00:00Z");
+    const venc = new Date("2026-11-16T00:00:00Z");
+    const params = { ...PARAMS_PADRAO, estrategias_ativas: ["compra_call" as const], prob_lucro_min: 0 };
+    const linhas = cadeiaSintetica(hoje, venc);
+    const opcoes = prepararOpcoes(linhas, S0, hoje, r, 0, params);
+    const estruturas = [...gerarEstruturas("PETR4", S0, opcoes, new Set(params.estrategias_ativas))];
+    expect(estruturas.length).toBeGreaterThan(0);
+    for (const [estrategia, , pernas] of estruturas) {
+      expect(estrategia).toBe("compra_call");
+      expect(pernas).toHaveLength(1);
+      const perna = pernas[0];
+      if (!perna) throw new Error("Call ausente");
+      expect(perna.tipo).toBe("CALL");
+      expect(perna.lado).toBe(1);
+      expect(perna.preco).toBe(opcoes.find(o => o.ticker === perna.ticker)?.ask);
+      const payoff = analisarPayoff(pernas);
+      expect(payoff.lucro_max).toBeNull();
+      expect(payoff.perda_max).toBeCloseTo(perna.preco, 9);
+      expect(payoff.breakevens[0]).toBeCloseTo(Number(perna.strike) + perna.preco, 5);
+    }
+    expect([...gerarEstruturas("PETR4", S0, opcoes, new Set())]).toEqual([]);
+    const ctx = { q: 0, ivr: 0.2, valuation_score: 70, sentimento: 0.2, datas_com: [], datas_balanco: [] };
+    const sinais = await gerarSinais("PETR4", S0, linhas, ctx, params, hoje, r);
+    expect(sinais.length).toBeGreaterThan(0);
+    for (const sinal of sinais) {
+      expect(sinal.lucro_max).toBeNull();
+      expect(sinal.perda_max).toBeCloseTo(sinal._pernas[0]?.preco ? sinal._pernas[0].preco * 100 : -1, 6);
+      expect(sinal.credito_debito).toBeCloseTo(-sinal.perda_max, 6);
+      expect(sinal.riscos).toContain("perda_total_premio");
+    }
+    expect(await gerarSinais("PETR4", S0, linhas, ctx, { ...params, capital: 1, risco_max_pct: 2 }, hoje, r)).toEqual([]);
+  });
   it("gera sinais estáveis e válidos em cadeia sintética", async () => {
     const hoje = new Date("2026-10-17T00:00:00Z");
     let venc = new Date(hoje.getTime() + 30 * 86400000);
