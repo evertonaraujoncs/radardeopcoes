@@ -17,7 +17,10 @@ export function retryAfterSeconds(value: string | null, now = Date.now()) {
 export function providerBlocked(status: number, body: string) {
   return [403, 429, 503].includes(status) || /limite de requisi|muitas requisi|too many requests|rate limit|acesso temporariamente/i.test(body);
 }
-export type CollectionSchedule = { kind: "ready" | "wait" | "recent"; token?: string; until?: string; circuit?: boolean };
+export function canRecalculateSignals(blocked: boolean, outcome: string) {
+  return !blocked && outcome === "success";
+}
+export type CollectionSchedule = { kind: "ready" | "wait" | "recent"; token?: string | undefined; until?: string | undefined; circuit?: boolean };
 export function readSchedule(data: unknown): CollectionSchedule {
   if (!data || typeof data !== "object" || !("kind" in data) || !["ready", "wait", "recent"].includes(String(data.kind))) throw new Error("Não foi possível consultar o intervalo da coleta.");
   const row = data as Record<string, unknown>;

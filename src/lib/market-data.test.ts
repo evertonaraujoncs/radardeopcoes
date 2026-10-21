@@ -45,4 +45,9 @@ describe("public option feed", () => {
     expect(() => validateOptionGrid(rows.slice(0, 4), "PETR4", "2026-11-20", "now")).toThrow();
     expect(() => validateOptionGrid([...rows.slice(0, 8), null, null], "PETR4", "2026-11-20", "now")).toThrow();
   });
+  it("allows untraded contracts in the universe but only saves provider-dated quotes", () => {
+    const rows = Array.from({ length: 10 }, (_, i) => [`PETRK${100 + i}`, "", "CALL", "", "", 30, 0, 0, i < 5 ? null : 1, 10, 100, i < 5 ? null : "2026-10-15"]);
+    expect(validateOptionGrid(rows, "PETR4", "2026-11-20", "2026-10-20T00:00:00Z")).toHaveLength(5);
+    expect(validateOptionGrid(rows, "PETR4", "2026-11-20", "now")[0]?.data_coleta).toBe("2026-10-15T03:00:00.000Z");
+  });
 });
