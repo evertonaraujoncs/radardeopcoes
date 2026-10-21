@@ -151,6 +151,7 @@ export const collectMarket = createServerFn({ method: "POST" })
     let blocked = false;
     let retrySeconds = 0;
     let outcome = "error";
+    let validatedQuotes = 0;
     const optionsJson = async (url: string) => {
       const response = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json", "Referer": "https://opcoes.net.br/opcoes/bovespa" }, signal: AbortSignal.timeout(20000) });
       const text = await response.text();
@@ -189,6 +190,7 @@ export const collectMarket = createServerFn({ method: "POST" })
         const payload = await optionsJson(`${base}&listarVencimentos=false&cotacoes=true&vencimentos=${expiry.value}`);
         if (payload.success !== true || !Array.isArray(payload.data?.cotacoesOpcoes)) throw new Error("Grade indisponível");
         const rows = validateOptionGrid(payload.data.cotacoesOpcoes, ticker, expiry.value, now);
+        validatedQuotes += rows.length;
         const { data: existing, error: readError } = await db.from("opcoes_grade").select("ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry.value);
         if (readError) throw readError;
         const keys = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
@@ -205,7 +207,8 @@ export const collectMarket = createServerFn({ method: "POST" })
         }
       }
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
-      if (selected.length) outcome = "success";
+      if (validatedQuotes) outcome = "success";
+      else warnings.push("Opções: a grade não contém cotações com data de negócio confirmada; dados e sinais existentes preservados.");
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     const finished = await db.rpc("finish_options_collection", { p_ticker: ticker, p_token: token, p_outcome: blocked ? "blocked" : outcome, p_retry_seconds: retrySeconds });
     if (finished.error) throw new Error("Não foi possível registrar a pausa da coleta; aguarde cinco minutos antes de tentar novamente.");

@@ -46,6 +46,11 @@ export function parseOptions(rows: unknown[], ticker: string, expiry: string, _c
 // Reject broken/misattributed grids before any shared write or signal calculation.
 export function validateOptionGrid(rows: unknown[], ticker: string, expiry: string, collectedAt: string) {
   const parsed = parseOptions(rows, ticker, expiry, collectedAt);
-  if (rows.length < 5 || parsed.length < rows.length * 0.9) throw new Error("Grade reprovada: poucas linhas válidas, campos alterados ou ativo/data de cotação não confirmados.");
+  const structural = rows.filter(row => {
+    if (!Array.isArray(row) || typeof row[0] !== "string" || !["CALL", "PUT"].includes(row[2]) || typeof row[5] !== "number" || !Number.isFinite(row[5]) || row[5] <= 0) return false;
+    const code = row[0].split("_")[0];
+    return !!code && /^[A-Z0-9]{4}[A-X]\d{1,4}(W\d|E)?$/.test(code) && code.slice(0, 4) === ticker.slice(0, 4);
+  });
+  if (rows.length < 5 || structural.length < rows.length * 0.9) throw new Error("Grade reprovada: poucas linhas válidas, campos alterados ou ativo não confirmado.");
   return [...new Map(parsed.map(row => [row.ticker, row])).values()];
 }
