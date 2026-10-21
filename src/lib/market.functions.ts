@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { validateOptionGrid, parseOptionTickers, parseYahooNews, parseYahooEvents } from "./market-data";
+import { validateOptionGrid, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
 import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
@@ -122,6 +122,27 @@ export const collectionTargets = createServerFn({ method: "POST" })
     const readable = await context.supabase.from("ativos").select("ticker").in("ticker", tickers);
     if (readable.error) throw new Error("Não foi possível consultar os ativos para coleta.");
     return (readable.data ?? []).map(row => row.ticker).sort();
+  });
+
+export const liquidCollectionTargets = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const tickers = await optionCatalog();
+    const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+    const registered = await db.from("ativos").upsert(tickers.map(ticker => ({ ticker })), { onConflict: "ticker", ignoreDuplicates: true });
+    if (registered.error) throw new Error("Não foi possível registrar os ativos do ranking.");
+    const readable = await context.supabase.from("ativos").select("ticker").in("ticker", tickers);
+    if (readable.error) throw new Error("Não foi possível consultar os ativos disponíveis.");
+    const stocks: unknown[] = [];
+    for (let page = 1; page <= 10; page++) {
+      const response = await fetch(`https://brapi.dev/api/quote/list?sortBy=volume&sortOrder=desc&limit=1000&page=${page}`, { signal: AbortSignal.timeout(20000) });
+      if (!response.ok) throw new Error("Ranking de liquidez indisponível; nenhuma coleta iniciada.");
+      const payload = await response.json() as { stocks?: unknown[]; hasNextPage?: boolean };
+      if (!Array.isArray(payload.stocks)) throw new Error("Ranking não disponibilizado pela fonte.");
+      stocks.push(...payload.stocks);
+      if (!payload.hasNextPage) return { tickers: rankLiquidTargets({ stocks }, (readable.data ?? []).map(row => row.ticker)), source: "brapi.dev", metric: "Volume financeiro estimado: fechamento × quantidade negociada, último pregão disponível" };
+    }
+    throw new Error("Cobertura incompleta do ranking; nenhuma coleta iniciada.");
   });
 
 export const collectMarket = createServerFn({ method: "POST" })

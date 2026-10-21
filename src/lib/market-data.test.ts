@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { parseOptions, validateOptionGrid, parseOptionTickers, selectedTargets, parseYahooNews, parseYahooEvents } from "./market-data";
+import { parseOptions, validateOptionGrid, parseOptionTickers, selectedTargets, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 
 describe("collection selection", () => {
+  it("ranks exactly 20 registered option assets by closing price times traded quantity, not alphabetical order", () => {
+    const available = Array.from({ length: 25 }, (_, i) => `TICK${i}`);
+    const stocks = available.map((stock, i) => ({ stock, volume: i + 1, close: 10 }));
+    stocks.push({ stock: "FAKE3", volume: 999999, close: 100 });
+    const liquid = rankLiquidTargets({ stocks }, available);
+    expect(liquid).toEqual(available.slice(5).reverse());
+    expect(selectedTargets(available, "top20", liquid)).toEqual(liquid);
+    expect(selectedTargets(available, "top20", [...liquid, "FAKE3", ...liquid])).toHaveLength(20);
+    expect(() => rankLiquidTargets({ stocks: stocks.slice(0, 19) }, available)).toThrow();
+    expect(() => rankLiquidTargets({ stocks: [{ stock: available[0], close: 10, volume: null }] }, available)).toThrow();
+  });
   it("collects only the selected ticker", () => {
     expect(selectedTargets(["PETR4", "VALE3"], "VALE3")).toEqual(["VALE3"]);
     expect(selectedTargets(["PETR4", "VALE3"], "FAKE3")).toEqual([]);
