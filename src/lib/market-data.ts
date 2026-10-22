@@ -74,7 +74,7 @@ export function parseProviderChain(payload: unknown, ticker: string, collectedAt
   return chain.expirations.flatMap(expiry => {
     if (!expiry.dt || !/^\d{4}-\d{2}-\d{2}$/.test(expiry.dt)) return [];
     const input = [...(expiry.calls ?? []).map(row => ({ row, type: "CALL" })), ...(expiry.puts ?? []).map(row => ({ row, type: "PUT" }))];
-    if (!input.length) return [];
+    if (input.length < 5) return [];
     const mapped = input.map(({ row, type }) => Array.isArray(row) ? [`${ticker.slice(0, 4)}${value(row, "suffix")}`, "", type, "", "", value(row, "s"), 0, 0, value(row, "p"), value(row, "n"), value(row, "f"), value(row, "h")] : null);
     const parsed = validateOptionGrid(mapped, ticker, expiry.dt, collectedAt);
     const originals = new Map(input.flatMap(({ row }) => Array.isArray(row) ? [[`${ticker.slice(0, 4)}${value(row, "suffix")}`, row] as const] : []));
