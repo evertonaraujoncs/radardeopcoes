@@ -1,0 +1,2 @@
+ALTER TABLE public.opcoes_grade ADD COLUMN IF NOT EXISTS gamma numeric, ADD COLUMN IF NOT EXISTS theta numeric, ADD COLUMN IF NOT EXISTS vega numeric, ADD COLUMN IF NOT EXISTS fonte text;
+COMMENT ON COLUMN public.opcoes_grade.fonte IS 'Original provider URL; null for legacy quote imports. Greeks here are provider-reported, not engine estimates.';

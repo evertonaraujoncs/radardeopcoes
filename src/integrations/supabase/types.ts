@@ -237,13 +237,17 @@ export type Database = {
           bid: number | null
           data_coleta: string
           delta: number | null
+          fonte: string | null
+          gamma: number | null
           id: number
           iv: number | null
           negocios: number | null
           strike: number | null
+          theta: number | null
           ticker: string
           tipo: string | null
           ultimo: number | null
+          vega: number | null
           vencimento: string | null
           volume: number | null
         }
@@ -254,13 +258,17 @@ export type Database = {
           bid?: number | null
           data_coleta?: string
           delta?: number | null
+          fonte?: string | null
+          gamma?: number | null
           id?: never
           iv?: number | null
           negocios?: number | null
           strike?: number | null
+          theta?: number | null
           ticker: string
           tipo?: string | null
           ultimo?: number | null
+          vega?: number | null
           vencimento?: string | null
           volume?: number | null
         }
@@ -271,13 +279,17 @@ export type Database = {
           bid?: number | null
           data_coleta?: string
           delta?: number | null
+          fonte?: string | null
+          gamma?: number | null
           id?: never
           iv?: number | null
           negocios?: number | null
           strike?: number | null
+          theta?: number | null
           ticker?: string
           tipo?: string | null
           ultimo?: number | null
+          vega?: number | null
           vencimento?: string | null
           volume?: number | null
         }
