@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseOptions, validateOptionGrid, parseOptionTickers, selectedTargets, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
+import { parseOptions, validateOptionGrid, parseOptionTickers, selectedTargets, parseYahooNews, parseYahooEvents, rankLiquidTargets, parseProviderChain } from "./market-data";
 
 describe("collection selection", () => {
   it("ranks exactly 20 registered option assets by closing price times traded quantity, not alphabetical order", () => {
@@ -39,6 +39,16 @@ describe("Yahoo coverage", () => {
 });
 
 describe("public option feed", () => {
+  it("maps provider column IDs to real IV and greeks, preserving missing bid/ask and quote dates", () => {
+    const columns = ["suffix", "s", "p", "h", "n", "f", "i", "d", "g", "tf", "v"].map(id => ({ id }));
+    const calls = Array.from({ length: 5 }, (_, i) => [`K${566 + i}`, 55.41, 4.98, "2026-10-21", 23, 442724, 0.489, 0.6789, 0.0449, -0.0902, 5.8398]);
+    const payload = { success: true, requests: [{ type: "OptionsChain", results: { underlying_asset: { t: "PETR4" }, columns, expirations: [{ dt: "2026-11-19", calls, puts: [] }] } }] };
+    const quotes = parseProviderChain(payload, "PETR4", "2026-10-22T00:00:00Z");
+    expect(quotes).toHaveLength(5);
+    expect(quotes[0]).toMatchObject({ ticker: "PETRK566", iv: 0.489, delta: 0.6789, gamma: 0.0449, theta: -0.0902, vega: 5.8398, bid: null, ask: null, data_coleta: "2026-10-21T03:00:00.000Z" });
+    expect(() => parseProviderChain(payload, "VALE3", "now")).toThrow();
+    expect(() => parseProviderChain({ ...payload, success: false }, "PETR4", "now")).toThrow();
+  });
   it("preserves quote date and never invents locked fields", () => {
     const row = ["PETRJ253_2026", "", "CALL", "A", "ITM", 39, 0, 0, 1.25, 12, 500, "2026-10-15", "<img>"];
     const parsed = parseOptions([row], "PETR4", "2026-10-16", "2026-10-16T03:00:00Z");
