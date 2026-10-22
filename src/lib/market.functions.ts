@@ -215,11 +215,13 @@ export const collectMarket = createServerFn({ method: "POST" })
         validatedQuotes += rows.length;
         const { data: existing, error: readError } = await db.from("opcoes_grade").select("id,ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry);
         if (readError) throw readError;
-        // Enrich legacy snapshots only when the original provider timestamp matches exactly.
-        for (const row of rows) {
-          const match = existing?.find(e => e.ticker === row.ticker && e.data_coleta === row.data_coleta);
-          if (!match) continue;
-          const updated = await db.from("opcoes_grade").update({ bid: row.bid, ask: row.ask, iv: row.iv, delta: row.delta, gamma: row.gamma, theta: row.theta, vega: row.vega, fonte: row.fonte }).eq("id", match.id);
+        // The legacy schema stores quote days as DATE; enrich that same provider day.
+        const enrich = rows.flatMap(row => {
+          const match = existing?.find(e => e.ticker === row.ticker && e.data_coleta.slice(0, 10) === row.data_coleta.slice(0, 10));
+          return match ? [{ ...row, id: match.id }] : [];
+        });
+        for (let i = 0; i < enrich.length; i += 500) {
+          const updated = await db.from("opcoes_grade").upsert(enrich.slice(i, i + 500), { onConflict: "id" });
           if (updated.error) throw updated.error;
         }
         const keys = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
