@@ -220,9 +220,10 @@ export const collectMarket = createServerFn({ method: "POST" })
           const match = existing?.find(e => e.ticker === row.ticker && e.data_coleta.slice(0, 10) === row.data_coleta.slice(0, 10));
           return match ? [{ ...row, id: match.id }] : [];
         });
-        for (let i = 0; i < enrich.length; i += 500) {
-          const updated = await db.from("opcoes_grade").upsert(enrich.slice(i, i + 500), { onConflict: "id" });
-          if (updated.error) throw updated.error;
+        for (let i = 0; i < enrich.length; i += 20) {
+          const updated = await Promise.all(enrich.slice(i, i + 20).map(({ id, ...quote }) => db.from("opcoes_grade").update(quote).eq("id", id)));
+          const failed = updated.find(result => result.error);
+          if (failed?.error) throw failed.error;
         }
         const keys = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
         const fresh = rows.filter(r => {
