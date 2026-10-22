@@ -59,6 +59,33 @@ export function parseOptions(rows: unknown[], ticker: string, expiry: string, _c
   });
 }
 
+export function parseProviderChain(payload: unknown, ticker: string, collectedAt: string) {
+  const response = payload as { success?: boolean; requests?: { type?: string; error?: unknown; results?: unknown }[] } | null;
+  const request = response?.requests?.find(r => r.type === "OptionsChain");
+  const chain = request?.results as { underlying_asset?: { t?: string }; columns?: { id?: string }[]; expirations?: { dt?: string; calls?: unknown[]; puts?: unknown[] }[] } | null;
+  if (!response?.success || request?.error || chain?.underlying_asset?.t !== ticker || !Array.isArray(chain.columns) || !Array.isArray(chain.expirations)) throw new Error("Grade indisponível ou ativo da fonte não confirmado.");
+  const columns = chain.columns.map(c => c.id);
+  if (["suffix", "s", "p", "h", "n", "f"].some(id => !columns.includes(id))) throw new Error("Colunas obrigatórias ausentes na grade.");
+  const value = (row: unknown[], id: string) => row[columns.indexOf(id)];
+  const numeric = (row: unknown[], id: string) => {
+    const v = value(row, id);
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
+  return chain.expirations.flatMap(expiry => {
+    if (!expiry.dt || !/^\d{4}-\d{2}-\d{2}$/.test(expiry.dt)) return [];
+    const input = [...(expiry.calls ?? []).map(row => ({ row, type: "CALL" })), ...(expiry.puts ?? []).map(row => ({ row, type: "PUT" }))];
+    if (!input.length) return [];
+    const mapped = input.map(({ row, type }) => Array.isArray(row) ? [`${ticker.slice(0, 4)}${value(row, "suffix")}`, "", type, "", "", value(row, "s"), 0, 0, value(row, "p"), value(row, "n"), value(row, "f"), value(row, "h")] : null);
+    const parsed = validateOptionGrid(mapped, ticker, expiry.dt, collectedAt);
+    const originals = new Map(input.flatMap(({ row }) => Array.isArray(row) ? [[`${ticker.slice(0, 4)}${value(row, "suffix")}`, row] as const] : []));
+    return parsed.map(quote => {
+      const row = originals.get(quote.ticker) ?? [];
+      const iv = numeric(row, "i");
+      return { ...quote, bid: numeric(row, "b"), ask: numeric(row, "a"), iv: iv !== null && iv > 0 ? iv : null, delta: numeric(row, "d"), gamma: numeric(row, "g"), theta: numeric(row, "tf"), vega: numeric(row, "v"), fonte: "https://opcoes.net.br/opcoes/bovespa" };
+    });
+  });
+}
+
 // Reject broken/misattributed grids before any shared write or signal calculation.
 export function validateOptionGrid(rows: unknown[], ticker: string, expiry: string, collectedAt: string) {
   const parsed = parseOptions(rows, ticker, expiry, collectedAt);

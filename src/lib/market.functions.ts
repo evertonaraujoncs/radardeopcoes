@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { validateOptionGrid, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
+import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
 import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
@@ -202,18 +202,26 @@ export const collectMarket = createServerFn({ method: "POST" })
     }
     } catch (error) { warnings.push(`Cotações: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     try {
-      const base = `https://opcoes.net.br/listaopcoes/completa?idAcao=${ticker}`;
-       const expiries = await optionsJson(`${base}&listarVencimentos=true&cotacoes=false`);
-      if (expiries.success !== true || !Array.isArray(expiries.data?.vencimentos)) throw new Error("Vencimentos indisponíveis");
+      const query = new URLSearchParams({ r0t: "LastQuotesInfo", r1t: "OptionsChain", "r1p.underlying_asset_id": ticker, "r1p.skip": "0", "r1p.load": "8", "r1p.columns_info": "true", "r1p.underlying_quotes": "true" });
+      const payload = await optionsJson(`https://opcoes.net.br/api/v1?${query}`);
+      const allRows = parseProviderChain(payload, ticker, now);
       const today = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
-      const selected = expiries.data.vencimentos.filter((v: { value: string }) => /^\d{4}-\d{2}-\d{2}$/.test(v.value) && v.value >= today).slice(0, 3);
+      const selected = [...new Set(allRows.map(row => row.vencimento))].filter(date => {
+        const days = (Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000;
+        return days >= 15 && days <= 60;
+      }).sort().slice(0, 3);
       for (const expiry of selected) {
-        const payload = await optionsJson(`${base}&listarVencimentos=false&cotacoes=true&vencimentos=${expiry.value}`);
-        if (payload.success !== true || !Array.isArray(payload.data?.cotacoesOpcoes)) throw new Error("Grade indisponível");
-        const rows = validateOptionGrid(payload.data.cotacoesOpcoes, ticker, expiry.value, now);
+        const rows = allRows.filter(row => row.vencimento === expiry);
         validatedQuotes += rows.length;
-        const { data: existing, error: readError } = await db.from("opcoes_grade").select("ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry.value);
+        const { data: existing, error: readError } = await db.from("opcoes_grade").select("id,ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry);
         if (readError) throw readError;
+        // Enrich legacy snapshots only when the original provider timestamp matches exactly.
+        for (const row of rows) {
+          const match = existing?.find(e => e.ticker === row.ticker && e.data_coleta === row.data_coleta);
+          if (!match) continue;
+          const updated = await db.from("opcoes_grade").update({ bid: row.bid, ask: row.ask, iv: row.iv, delta: row.delta, gamma: row.gamma, theta: row.theta, vega: row.vega, fonte: row.fonte }).eq("id", match.id);
+          if (updated.error) throw updated.error;
+        }
         const keys = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
         const fresh = rows.filter(r => {
           const key = `${r.ticker}:${r.data_coleta.slice(0, 10)}`;
@@ -228,6 +236,7 @@ export const collectMarket = createServerFn({ method: "POST" })
         }
       }
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
+      if (allRows.some(row => row.bid === null || row.ask === null)) warnings.push("Ofertas: bid/ask não disponibilizados no acesso público de fechamento do Opções.net; gregas disponíveis são salvas, preços do motor sem ofertas continuam estimados.");
       if (validatedQuotes) outcome = "success";
       else warnings.push("Opções: a grade não contém cotações com data de negócio confirmada; dados e sinais existentes preservados.");
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
