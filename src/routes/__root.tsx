@@ -14,6 +14,8 @@ import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import { isChunkLoadError, recoverChunkLoad } from "@/lib/chunk-recovery";
 
 function NotFoundComponent() {
   return (
@@ -36,18 +38,22 @@ function ErrorComponent({ error, reset }: ErrorComponentProps) {
   const router = useRouter();
   useEffect(() => {
     reportLovableError(error, { boundary: "tanstack_root_error_component" });
+    recoverChunkLoad(error, window.sessionStorage, () => window.location.reload());
   }, [error]);
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold text-foreground">Esta página não carregou</h1>
         <p className="mt-2 text-sm text-muted-foreground">Algo deu errado. Tente novamente.</p>
-        <button
-          onClick={() => { router.invalidate(); reset(); }}
-          className="mt-6 inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+        <Button
+          onClick={() => {
+            if (isChunkLoadError(error)) { window.location.reload(); return; }
+            router.invalidate(); reset();
+          }}
+          className="mt-6"
         >
           Tentar de novo
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -80,6 +86,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
 });
 
 function RootShell({ children }: { children: ReactNode }) {
+  useEffect(() => {
+    const onPreloadError = (event: Event) => {
+      const error = (event as Event & { payload?: unknown }).payload;
+      if (recoverChunkLoad(error, window.sessionStorage, () => window.location.reload())) event.preventDefault();
+    };
+    window.addEventListener("vite:preloadError", onPreloadError);
+    return () => window.removeEventListener("vite:preloadError", onPreloadError);
+  }, []);
   return (
     <html lang="pt-BR" className="dark">
       <head><HeadContent /></head>

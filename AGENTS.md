@@ -20,5 +20,6 @@
 - Adapt Python scraper protections to Worker-safe fetch collection: persist atomic provider leases, successful-asset intervals and retry/circuit state in server-owned storage; defer long waits to the calling UI so retries survive requests without server sleeps. Do not execute Python/Chromium or auto-generated adapter code in the app runtime.
 - Validate option grids and underlying attribution before writes; failed/blocked option collection must preserve existing signals instead of recalculating or closing them from incomplete coverage.
 - Read Opções.net closing chains through its public OptionsChain request and map columns by provider IDs, validating underlying attribution and original timestamps; store provider Greeks separately from engine estimates and leave unavailable offers null.
+- Recover stale route chunks at the root boundary and Vite preload event with a session-persisted reload guard; this fetches the current deployment without an automatic reload loop.
 
 - Motor de sinais portado de motor_sinais.py para src/lib/signal-engine.ts (lógica pura, testada em signal-engine.test.ts); a orquestração roda em rodarMotor dentro de src/lib/market.functions.ts, acionada ao fim de cada coleta, usando a grade mais recente por opção na janela de 4 dias e CDI do BCB com fallback de 15% estimado.
