@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { collectionTargets, collectMarket, liquidCollectionTargets } from "@/lib/market.functions";
 import { selectedTargets } from "@/lib/market-data";
+import { COLLECTION_POLICY } from "@/lib/collection-policy";
 
 export function ColetarDados() {
   const targets = useServerFn(collectionTargets);
@@ -50,7 +51,7 @@ export function ColetarDados() {
           while (!stop.current) {
             const result = await collect({ data: { ticker, optionsOnly } });
             if (result.schedule.kind === "recent") {
-              setResults(previous => [...previous, `${ticker}: coleta de opções já concluída nas últimas 4 horas; dados preservados.`]);
+              setResults(previous => [...previous, `${ticker}: coleta de opções já concluída nos últimos ${COLLECTION_POLICY.minimumMinutes} minutos; dados preservados.`]);
               break;
             }
             if (result.schedule.kind === "wait") {
