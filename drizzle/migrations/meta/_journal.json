@@ -43,6 +43,13 @@
       "when": 1792633649972,
       "tag": "0005_option_provider_greeks",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1792739267337,
+      "tag": "0006_options_collection_twenty_minutes",
+      "breakpoints": true
     }
   ]
 }

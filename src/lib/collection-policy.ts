@@ -1,5 +1,5 @@
 // Portable protections adapted from the uploaded opcoes_scraper_1.py.
-export const COLLECTION_POLICY = { pauseSeconds: 30, attempts: 4, minimumHours: 4, backoffBase: 60, backoffCap: 900, failedAssets: 2 } as const;
+export const COLLECTION_POLICY = { pauseSeconds: 30, attempts: 4, minimumMinutes: 20, backoffBase: 60, backoffCap: 900, failedAssets: 2 } as const;
 export function pauseMilliseconds(random = Math.random()) {
   return COLLECTION_POLICY.pauseSeconds * (0.7 + 0.6 * random) * 1000;
 }

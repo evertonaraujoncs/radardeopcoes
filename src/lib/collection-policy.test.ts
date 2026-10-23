@@ -6,10 +6,12 @@ describe("uploaded scraper protections", () => {
     expect(pauseMilliseconds(0)).toBe(21000);
     expect(pauseMilliseconds(1)).toBeCloseTo(39000);
   });
-  it("uses four total attempts, four-hour successful collection interval and two exhausted assets", () => {
+  it("uses four total attempts and two exhausted assets", () => {
     expect(COLLECTION_POLICY.attempts).toBe(4);
-    expect(COLLECTION_POLICY.minimumHours).toBe(4);
     expect(COLLECTION_POLICY.failedAssets).toBe(2);
+  });
+  it("allows successful collection to repeat after 20 minutes", () => {
+    expect(COLLECTION_POLICY.minimumMinutes).toBe(20);
   });
   it("backs off exponentially and never shortens Retry-After", () => {
     expect(retryMilliseconds(0, 0, 0)).toBe(48000);
