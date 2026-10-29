@@ -1,11 +1,18 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { deduplicarPorChave } from "@/lib/dedupe";
+import { diaSP, liquidarVencidos } from "@/lib/settlement";
 
 /**
  * Endpoint de ingestão para o robô (motor_sinais.py).
  * O robô envia um POST com JSON contendo arrays por tabela.
  * Autenticação: header `x-ingest-key` deve bater com o segredo INGEST_KEY.
+ *
+ * Idempotente: reenviar o mesmo lote (retry do robô, timeout, duplo clique) não duplica linhas.
+ *  - Tabelas com chave natural usam upsert (sinais, ativos, opcoes_grade, fundamentos, dividendos, eventos, noticias).
+ *  - Tabelas de eventos sem chave natural (sinais_historico, alertas, scraper_status) ficam protegidas pelo
+ *    lote: header `Idempotency-Key` (permanente) ou, sem ele, o hash do corpo (janela de 15 min).
  */
 
 const sinalSchema = z.object({
@@ -54,6 +61,29 @@ function keyValida(provided: string | null, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+const JANELA_HASH_MIN = 15;
+
+/** Chaves naturais de cada tabela (colunas do índice/constraint único). */
+const CHAVE_NATURAL = {
+  ativos: "ticker",
+  opcoes_grade: "ticker,data_coleta",
+  fundamentos: "ticker,data",
+  dividendos: "ticker,data_com,tipo",
+  eventos: "ticker,tipo,data",
+  noticias: "url",
+} as const;
+const SEM_CHAVE = ["sinais_historico", "alertas", "scraper_status"] as const;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function reservarLote(db: any, id: string, janelaMin: number | null): Promise<"nova" | "duplicada"> {
+  await db.from("ingest_lotes").delete().lt("recebido_em", new Date(Date.now() - 30 * 86400000).toISOString());
+  if (janelaMin) await db.from("ingest_lotes").delete().eq("id", id).lt("recebido_em", new Date(Date.now() - janelaMin * 60000).toISOString());
+  const { error } = await db.from("ingest_lotes").insert({ id });
+  if (!error) return "nova";
+  if (error.code === "23505") return "duplicada";
+  throw new Error(`lote: ${error.message}`);
+}
+
 export const Route = createFileRoute("/api/public/ingest")({
   server: {
     handlers: {
@@ -66,9 +96,10 @@ export const Route = createFileRoute("/api/public/ingest")({
           return Response.json({ erro: "chave inválida" }, { status: 401 });
         }
 
+        const raw = await request.text();
         let body: unknown;
         try {
-          body = await request.json();
+          body = JSON.parse(raw);
         } catch {
           return Response.json({ erro: "JSON inválido" }, { status: 400 });
         }
@@ -79,7 +110,22 @@ export const Route = createFileRoute("/api/public/ingest")({
         const p = parsed.data;
 
         const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+        const explicita = request.headers.get("idempotency-key")?.trim().slice(0, 200) || null;
+        const loteId = explicita ?? `corpo:${createHash("sha256").update(raw).digest("hex")}`;
+        try {
+          if ((await reservarLote(supabaseAdmin, loteId, explicita ? null : JANELA_HASH_MIN)) === "duplicada") {
+            return Response.json({ ok: true, duplicado: true, gravados: {} });
+          }
+        } catch (e) {
+          return Response.json({ erro: e instanceof Error ? e.message : "falha ao registrar o lote" }, { status: 500 });
+        }
+
         const resultado: Record<string, number | string> = {};
+        const falha = async (erro: string) => {
+          // Libera o lote para que o retry do robô reprocesse (os upserts abaixo são seguros para repetir).
+          await supabaseAdmin.from("ingest_lotes").delete().eq("id", loteId);
+          return Response.json({ erro }, { status: 500 });
+        };
 
         // Sinais: upsert pela chave única (atualiza sinal existente ou cria novo)
         const sinais = p["sinais"];
@@ -87,28 +133,37 @@ export const Route = createFileRoute("/api/public/ingest")({
           const { error } = await supabaseAdmin
             .from("sinais")
             .upsert(sinais as never, { onConflict: "chave" });
-          if (error) return Response.json({ erro: `sinais: ${error.message}` }, { status: 500 });
+          if (error) return falha(`sinais: ${error.message}`);
           resultado["sinais"] = sinais.length;
         }
 
-        // Demais tabelas: inserção simples
-        const simples = [
-          ["ativos", p["ativos"]],
-          ["opcoes_grade", p["opcoes_grade"]],
-          ["sinais_historico", p["sinais_historico"]],
-          ["alertas", p["alertas"]],
-          ["noticias", p["noticias"]],
-          ["fundamentos", p["fundamentos"]],
-          ["eventos", p["eventos"]],
-          ["dividendos", p["dividendos"]],
-          ["scraper_status", p["scraper_status"]],
-        ] as const;
+        // Tabelas com chave natural: upsert (repetir o envio atualiza, não duplica)
+        for (const [tabela, onConflict] of Object.entries(CHAVE_NATURAL)) {
+          let linhas = p[tabela as keyof typeof CHAVE_NATURAL] as Record<string, unknown>[] | undefined;
+          if (!linhas?.length) continue;
+          if (tabela === "opcoes_grade") linhas = linhas.map((l) => ({ ...l, data_coleta: l["data_coleta"] ?? diaSP(new Date()) }));
+          // Duas linhas com a mesma chave no mesmo lote fariam o Postgres recusar o upsert: fica a última.
+          const unicas = deduplicarPorChave(linhas, onConflict.split(","), { tipo: "dividendo" });
+          const { error } = await supabaseAdmin.from(tabela as keyof typeof CHAVE_NATURAL).upsert(unicas as never, { onConflict });
+          if (error) return falha(`${tabela}: ${error.message}`);
+          resultado[tabela] = unicas.length;
+        }
 
-        for (const [tabela, linhas] of simples) {
+        // Tabelas de eventos sem chave natural: inserção protegida pelo lote
+        for (const tabela of SEM_CHAVE) {
+          const linhas = p[tabela];
           if (!linhas?.length) continue;
           const { error } = await supabaseAdmin.from(tabela).insert(linhas as never);
-          if (error) return Response.json({ erro: `${tabela}: ${error.message}` }, { status: 500 });
-          resultado[tabela as string] = linhas.length;
+          if (error) return falha(`${tabela}: ${error.message}`);
+          resultado[tabela] = linhas.length;
+        }
+
+        // Sinais cujo vencimento passou ganham o resultado real.
+        try {
+          const l = await liquidarVencidos(supabaseAdmin);
+          if (l.liquidados) resultado["liquidados"] = l.liquidados;
+        } catch (e) {
+          resultado["aviso_liquidacao"] = e instanceof Error ? e.message : "falha";
         }
 
         return Response.json({ ok: true, gravados: resultado });

@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { exigirAdmin } from "./admin";
+import { liquidarVencidos } from "./settlement";
 import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
 import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
@@ -75,7 +77,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   const sinais = await gerarSinais(ticker, S0, [...ultimas.values()], ctx, params, hoje, r);
 
   const agora = new Date().toISOString();
-  const ex = await db.from("sinais").select("id,chave,score,ticker,estrategia").eq("status", "ativo").eq("ticker", ticker);
+  const ex = await db.from("sinais").select("id,chave,score,ticker,estrategia").eq("status", "ativo").eq("ticker", ticker).gte("vencimento", hojeStr);
   if (ex.error) throw new Error(ex.error.message);
   const existentes = new Map<string, { id: number; score: number | null; ticker: string; estrategia: string }>((ex.data ?? []).map((e: { chave: string; id: number; score: number | null; ticker: string; estrategia: string }) => [e.chave, e]));
   const novos = new Map(sinais.map(s => [s.chave, s]));
@@ -90,7 +92,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     if (h.error) throw new Error(h.error.message);
   }
   if (encerrar.length) {
-    const e = await db.from("sinais").update({ status: "encerrado", atualizado_em: agora }).in("chave", encerrar);
+    const e = await db.from("sinais").update({ status: "encerrado", motivo_encerramento: "deixou_de_valer", encerrado_em: agora, atualizado_em: agora }).eq("status", "ativo").in("chave", encerrar);
     if (e.error) throw new Error(e.error.message);
   }
   const feitos = await db.from("alertas").select("sinal_id,tipo").gte("criado_em", `${hojeStr}T00:00:00`);
@@ -114,6 +116,7 @@ async function optionCatalog() {
 export const collectionTargets = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await exigirAdmin(context.supabase);
     // Authenticate before consulting the server-owned catalog or writing shared rows.
     const tickers = await optionCatalog();
     const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
@@ -127,6 +130,7 @@ export const collectionTargets = createServerFn({ method: "POST" })
 export const liquidCollectionTargets = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
+    await exigirAdmin(context.supabase);
     const tickers = await optionCatalog();
     const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
     const registered = await db.from("ativos").upsert(tickers.map(ticker => ({ ticker })), { onConflict: "ticker", ignoreDuplicates: true });
@@ -149,6 +153,7 @@ export const collectMarket = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => z.object({ ticker: z.string().regex(/^[A-Z]{4}\d{1,2}$/), optionsOnly: z.boolean().optional() }).parse(input))
   .handler(async ({ data, context }) => {
+    await exigirAdmin(context.supabase);
     // Only collect registered, user-readable assets; no arbitrary URLs or submitted market values.
     const [asset, signal] = await Promise.all([
       context.supabase.from("ativos").select("ticker").eq("ticker", data.ticker).limit(1),
@@ -213,29 +218,16 @@ export const collectMarket = createServerFn({ method: "POST" })
       for (const expiry of selected) {
         const rows = allRows.filter(row => row.vencimento === expiry);
         validatedQuotes += rows.length;
-        const { data: existing, error: readError } = await db.from("opcoes_grade").select("id,ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry);
+        // Uma cotação por opção por dia (índice único ticker+data_coleta): repetir a coleta atualiza em vez de duplicar.
+        const unicas = [...new Map(rows.map(row => [`${row.ticker}:${row.data_coleta.slice(0, 10)}`, row])).values()];
+        const { data: existing, error: readError } = await db.from("opcoes_grade").select("ticker,data_coleta").eq("ativo_base", ticker).eq("vencimento", expiry);
         if (readError) throw readError;
-        // The legacy schema stores quote days as DATE; enrich that same provider day.
-        const enrich = rows.flatMap(row => {
-          const match = existing?.find(e => e.ticker === row.ticker && e.data_coleta.slice(0, 10) === row.data_coleta.slice(0, 10));
-          return match ? [{ ...row, id: match.id }] : [];
-        });
-        for (let i = 0; i < enrich.length; i += 20) {
-          const updated = await Promise.all(enrich.slice(i, i + 20).map(({ id, ...quote }) => db.from("opcoes_grade").update(quote).eq("id", id)));
-          const failed = updated.find(result => result.error);
-          if (failed?.error) throw failed.error;
-        }
-        const keys = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
-        const fresh = rows.filter(r => {
-          const key = `${r.ticker}:${r.data_coleta.slice(0, 10)}`;
-          if (keys.has(key)) return false;
-          keys.add(key);
-          return true;
-        });
-        for (let i = 0; i < fresh.length; i += 500) {
-          const { error } = await db.from("opcoes_grade").insert(fresh.slice(i, i + 500));
+        const known = new Set((existing ?? []).map(r => `${r.ticker}:${r.data_coleta.slice(0, 10)}`));
+        for (let i = 0; i < unicas.length; i += 500) {
+          const lote = unicas.slice(i, i + 500);
+          const { error } = await db.from("opcoes_grade").upsert(lote, { onConflict: "ticker,data_coleta" });
           if (error) throw error;
-          optionsCount += fresh.slice(i, i + 500).length;
+          optionsCount += lote.filter(r => !known.has(`${r.ticker}:${r.data_coleta.slice(0, 10)}`)).length;
         }
       }
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
@@ -274,6 +266,12 @@ export const collectMarket = createServerFn({ method: "POST" })
     } catch (error) { warnings.push(`Eventos Yahoo: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     let signalsCount = 0;
     let motorNota = "";
+    let liquidadosNota = "";
+    try {
+      const l = await liquidarVencidos(db, { ticker });
+      if (l.liquidados) liquidadosNota = `${l.liquidados} sinal(is) vencido(s) liquidado(s) com o fechamento do vencimento. `;
+      if (l.pendentes) warnings.push(`${l.pendentes} sinal(is) vencido(s) aguardando o preço de fechamento do vencimento`);
+    } catch (error) { warnings.push(`Liquidação de vencimentos: ${error instanceof Error ? error.message : "falha"}`); }
     try { if (canRecalculateSignals(blocked, outcome)) {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
@@ -282,7 +280,7 @@ export const collectMarket = createServerFn({ method: "POST" })
       motorNota = "Motor preservado: sinais existentes não foram recalculados ou encerrados sem uma grade validada nesta coleta.";
     }
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
-    const notes = `${motorNota} Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. ${warnings.join("; ")}`;
+    const notes = `${liquidadosNota}${motorNota} Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
     return { ticker, signalsCount, historyCount, optionsCount, newsCount, eventsCount, warnings, notes, schedule, retry: finishData?.retry ?? false, circuit: finishData?.circuit ?? false, nextAt: finishData?.until };

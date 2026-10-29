@@ -14,6 +14,21 @@ export type Database = {
   }
   public: {
     Tables: {
+      admin_users: {
+        Row: {
+          criado_em: string
+          user_id: string
+        }
+        Insert: {
+          criado_em?: string
+          user_id: string
+        }
+        Update: {
+          criado_em?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       alertas: {
         Row: {
           criado_em: string
@@ -160,6 +175,21 @@ export type Database = {
           roe?: number | null
           ticker?: string
           valuation_score?: number | null
+        }
+        Relationships: []
+      }
+      ingest_lotes: {
+        Row: {
+          id: string
+          recebido_em: string
+        }
+        Insert: {
+          id: string
+          recebido_em?: string
+        }
+        Update: {
+          id?: string
+          recebido_em?: string
         }
         Relationships: []
       }
@@ -364,17 +394,21 @@ export type Database = {
           criado_em: string
           curva_payoff: Json | null
           dias_vencimento: number | null
+          encerrado_em: string | null
           estrategia: string
           fatores: Json | null
           gregas: Json | null
           id: number
           iv_rank: number | null
           lucro_max: number | null
+          motivo_encerramento: string | null
           motivos: Json | null
           perda_max: number | null
           pernas: Json
           preco_ativo: number | null
+          preco_vencimento: number | null
           prob_lucro: number | null
+          resultado: number | null
           retorno_sobre_risco: number | null
           riscos: Json | null
           score: number | null
@@ -391,17 +425,21 @@ export type Database = {
           criado_em?: string
           curva_payoff?: Json | null
           dias_vencimento?: number | null
+          encerrado_em?: string | null
           estrategia: string
           fatores?: Json | null
           gregas?: Json | null
           id?: never
           iv_rank?: number | null
           lucro_max?: number | null
+          motivo_encerramento?: string | null
           motivos?: Json | null
           perda_max?: number | null
           pernas: Json
           preco_ativo?: number | null
+          preco_vencimento?: number | null
           prob_lucro?: number | null
+          resultado?: number | null
           retorno_sobre_risco?: number | null
           riscos?: Json | null
           score?: number | null
@@ -418,17 +456,21 @@ export type Database = {
           criado_em?: string
           curva_payoff?: Json | null
           dias_vencimento?: number | null
+          encerrado_em?: string | null
           estrategia?: string
           fatores?: Json | null
           gregas?: Json | null
           id?: never
           iv_rank?: number | null
           lucro_max?: number | null
+          motivo_encerramento?: string | null
           motivos?: Json | null
           perda_max?: number | null
           pernas?: Json
           preco_ativo?: number | null
+          preco_vencimento?: number | null
           prob_lucro?: number | null
+          resultado?: number | null
           retorno_sobre_risco?: number | null
           riscos?: Json | null
           score?: number | null
@@ -483,6 +525,8 @@ export type Database = {
     }
     Functions: {
       claim_options_collection: { Args: { p_ticker: string }; Returns: Json }
+      is_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
+      tornar_admin: { Args: { p_email: string }; Returns: string }
       finish_options_collection: {
         Args: {
           p_outcome: string

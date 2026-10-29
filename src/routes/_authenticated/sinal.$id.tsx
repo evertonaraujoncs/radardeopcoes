@@ -104,6 +104,22 @@ function SinalPage() {
 
       {teste && <p role="status" className="border-l-2 border-warn bg-warn/10 px-4 py-3 text-sm text-warn">Sinal de teste de integração — não é uma oportunidade validada com dados reais de mercado.</p>}
 
+      {s.status === "encerrado" && (
+        <div role="status" className="rounded-lg border bg-card px-4 py-3 text-sm">
+          {s.motivo_encerramento === "vencimento" ? (
+            s.resultado != null ? (
+              <p>
+                <span className="font-semibold">Encerrado no vencimento ({fmtDate(s.vencimento)}).</span>{" "}
+                Fechamento de {fmtBRL(s.preco_vencimento)}: resultado{" "}
+                <span className={`num font-semibold ${corValor(s.resultado)}`}>{fmtBRL(s.resultado)}</span> por lote de 100, sem custos nem dividendos.
+              </p>
+            ) : <p><span className="font-semibold">Encerrado no vencimento</span>, mas sem preço de fechamento confiável para calcular o resultado.</p>
+          ) : (
+            <p><span className="font-semibold">Encerrado antes do vencimento:</span> o motor deixou de gerar este sinal. Não há resultado final registrado.</p>
+          )}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-4">
         <ScoreBadge score={s.score} apagado={velho} />
         <div>

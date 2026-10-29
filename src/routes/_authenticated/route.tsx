@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
-import { Activity, Bell, Gauge, LogOut, Radar, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { Activity, Bell, Flag, Gauge, LogOut, Radar, SlidersHorizontal, TriangleAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { desatualizado, haQuanto } from "@/lib/format";
 import { useAgora } from "@/hooks/use-agora";
@@ -41,6 +41,7 @@ function useAlertasNaoLidos() {
 const nav = [
   { to: "/radar", label: "Radar", icon: Radar },
   { to: "/alertas", label: "Alertas", icon: Bell },
+  { to: "/resultados", label: "Resultados", icon: Flag },
   { to: "/parametros", label: "Parâmetros", icon: SlidersHorizontal },
   { to: "/status", label: "Status do robô", icon: Activity },
 ] as const;

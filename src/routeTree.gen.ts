@@ -15,6 +15,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAlertasRouteImport } from './routes/_authenticated/alertas'
 import { Route as AuthenticatedParametrosRouteImport } from './routes/_authenticated/parametros'
 import { Route as AuthenticatedRadarRouteImport } from './routes/_authenticated/radar'
+import { Route as AuthenticatedResultadosRouteImport } from './routes/_authenticated/resultados'
 import { Route as AuthenticatedStatusRouteImport } from './routes/_authenticated/status'
 import { Route as AuthenticatedAtivoTickerRouteImport } from './routes/_authenticated/ativo.$ticker'
 import { Route as AuthenticatedSinalIdRouteImport } from './routes/_authenticated/sinal.$id'
@@ -49,6 +50,11 @@ const AuthenticatedRadarRoute = AuthenticatedRadarRouteImport.update({
   path: '/radar',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedResultadosRoute = AuthenticatedResultadosRouteImport.update({
+  id: '/resultados',
+  path: '/resultados',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedStatusRoute = AuthenticatedStatusRouteImport.update({
   id: '/status',
   path: '/status',
@@ -77,6 +83,7 @@ export interface FileRoutesByFullPath {
   '/alertas': typeof AuthenticatedAlertasRoute
   '/parametros': typeof AuthenticatedParametrosRoute
   '/radar': typeof AuthenticatedRadarRoute
+  '/resultados': typeof AuthenticatedResultadosRoute
   '/status': typeof AuthenticatedStatusRoute
   '/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
   '/sinal/$id': typeof AuthenticatedSinalIdRoute
@@ -88,6 +95,7 @@ export interface FileRoutesByTo {
   '/alertas': typeof AuthenticatedAlertasRoute
   '/parametros': typeof AuthenticatedParametrosRoute
   '/radar': typeof AuthenticatedRadarRoute
+  '/resultados': typeof AuthenticatedResultadosRoute
   '/status': typeof AuthenticatedStatusRoute
   '/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
   '/sinal/$id': typeof AuthenticatedSinalIdRoute
@@ -101,6 +109,7 @@ export interface FileRoutesById {
   '/_authenticated/alertas': typeof AuthenticatedAlertasRoute
   '/_authenticated/parametros': typeof AuthenticatedParametrosRoute
   '/_authenticated/radar': typeof AuthenticatedRadarRoute
+  '/_authenticated/resultados': typeof AuthenticatedResultadosRoute
   '/_authenticated/status': typeof AuthenticatedStatusRoute
   '/_authenticated/ativo/$ticker': typeof AuthenticatedAtivoTickerRoute
   '/_authenticated/sinal/$id': typeof AuthenticatedSinalIdRoute
@@ -114,6 +123,7 @@ export interface FileRouteTypes {
     | '/alertas'
     | '/parametros'
     | '/radar'
+    | '/resultados'
     | '/status'
     | '/ativo/$ticker'
     | '/sinal/$id'
@@ -125,6 +135,7 @@ export interface FileRouteTypes {
     | '/alertas'
     | '/parametros'
     | '/radar'
+    | '/resultados'
     | '/status'
     | '/ativo/$ticker'
     | '/sinal/$id'
@@ -137,6 +148,7 @@ export interface FileRouteTypes {
     | '/_authenticated/alertas'
     | '/_authenticated/parametros'
     | '/_authenticated/radar'
+    | '/_authenticated/resultados'
     | '/_authenticated/status'
     | '/_authenticated/ativo/$ticker'
     | '/_authenticated/sinal/$id'
@@ -194,6 +206,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedRadarRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/resultados': {
+      id: '/_authenticated/resultados'
+      path: '/resultados'
+      fullPath: '/resultados'
+      preLoaderRoute: typeof AuthenticatedResultadosRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/status': {
       id: '/_authenticated/status'
       path: '/status'
@@ -229,6 +248,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedAlertasRoute: typeof AuthenticatedAlertasRoute
   AuthenticatedParametrosRoute: typeof AuthenticatedParametrosRoute
   AuthenticatedRadarRoute: typeof AuthenticatedRadarRoute
+  AuthenticatedResultadosRoute: typeof AuthenticatedResultadosRoute
   AuthenticatedStatusRoute: typeof AuthenticatedStatusRoute
   AuthenticatedAtivoTickerRoute: typeof AuthenticatedAtivoTickerRoute
   AuthenticatedSinalIdRoute: typeof AuthenticatedSinalIdRoute
@@ -238,6 +258,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAlertasRoute: AuthenticatedAlertasRoute,
   AuthenticatedParametrosRoute: AuthenticatedParametrosRoute,
   AuthenticatedRadarRoute: AuthenticatedRadarRoute,
+  AuthenticatedResultadosRoute: AuthenticatedResultadosRoute,
   AuthenticatedStatusRoute: AuthenticatedStatusRoute,
   AuthenticatedAtivoTickerRoute: AuthenticatedAtivoTickerRoute,
   AuthenticatedSinalIdRoute: AuthenticatedSinalIdRoute,

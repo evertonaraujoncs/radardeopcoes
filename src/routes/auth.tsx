@@ -25,7 +25,6 @@ export const Route = createFileRoute("/auth")({
 function AuthPage() {
   const { redirect } = Route.useSearch();
   const navigate = useNavigate();
-  const [modo, setModo] = useState<"entrar" | "criar">("entrar");
   const [email, setEmail] = useState("");
   const [senha, setSenha] = useState("");
   const [carregando, setCarregando] = useState(false);
@@ -35,18 +34,10 @@ function AuthPage() {
     e.preventDefault();
     setCarregando(true);
     try {
-      if (modo === "entrar") {
-        const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
-        if (error) throw error;
-        navigate({ to: destino });
-      } else {
-        const { data, error } = await supabase.auth.signUp({
-          email, password: senha, options: { emailRedirectTo: window.location.origin },
-        });
-        if (error) throw error;
-        if (data.session) navigate({ to: destino });
-        else toast.success("Conta criada! Confira seu e-mail para confirmar o cadastro.");
-      }
+      // Cadastro fechado: só existe login. Contas novas são criadas pelo administrador no backend.
+      const { error } = await supabase.auth.signInWithPassword({ email, password: senha });
+      if (error) throw error;
+      navigate({ to: destino });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Erro";
       toast.error(msg.includes("Invalid login") ? "E-mail ou senha incorretos." : msg);
@@ -63,7 +54,7 @@ function AuthPage() {
           <h1 className="text-xl font-semibold">Radar de Opções <span className="text-primary">B3</span></h1>
         </div>
         <p className="text-sm text-muted-foreground mb-6">
-          {modo === "entrar" ? "Entre para ver os sinais." : "Crie sua conta."}
+          Acesso restrito. Entre para ver os sinais.
         </p>
         <form onSubmit={enviar} className="space-y-4">
           <div className="space-y-1.5">
@@ -75,13 +66,9 @@ function AuthPage() {
             <Input id="senha" type="password" required minLength={6} value={senha} onChange={(e) => setSenha(e.target.value)} />
           </div>
           <Button type="submit" className="w-full" disabled={carregando}>
-            {carregando ? "Aguarde…" : modo === "entrar" ? "Entrar" : "Criar conta"}
+            {carregando ? "Aguarde…" : "Entrar"}
           </Button>
         </form>
-        <button type="button" onClick={() => setModo(modo === "entrar" ? "criar" : "entrar")}
-          className="mt-4 w-full text-center text-sm text-muted-foreground hover:text-foreground">
-          {modo === "entrar" ? "Não tem conta? Criar conta" : "Já tem conta? Entrar"}
-        </button>
       </div>
     </div>
   );

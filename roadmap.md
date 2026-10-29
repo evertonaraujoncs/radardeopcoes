@@ -16,3 +16,12 @@
 - [ ] Notícias e eventos completos: tentativas Yahoo integradas, mas notícias retornam vazias e calendário retorna HTTP 401; endereço móvel indicado retorna 404. Bloqueio: fonte Yahoo acessível com cobertura por ticker.
 - [x] Integrar o motor de sinais ao app (porte para TypeScript, rodando no servidor após cada coleta, com testes do selftest).
 - [ ] Fonte confiável de cotações de opções B3 com bid/ask reais, alimentando IV, gregas e recálculo dos sinais (pedido do usuário; opcoes.net.br gratuito não expõe bid/ask).
+
+## Acesso, dados e resultados
+- [x] Cadastro fechado: tela de login sem "Criar conta"; desligar também o cadastro aberto nas configurações de autenticação do backend.
+- [x] Conta admin única para coleta (`admin_users`, `is_admin()`, `exigirAdmin` nas 3 server functions de coleta; botão visível só para admin).
+- [x] Paginação no servidor no Radar (24 por página, filtros na consulta) e na tela Resultados.
+- [x] Ingestão idempotente (upsert por chave natural + lote `Idempotency-Key`/hash) e índice único em `opcoes_grade (ticker, data_coleta)`.
+- [x] Resultado no vencimento: liquidação automática com o fechamento do ativo, tela Resultados com taxa de acerto vs. probabilidade prevista.
+- [ ] Rodar `select public.tornar_admin('<seu e-mail>')` após aplicar a migration 0007.
+

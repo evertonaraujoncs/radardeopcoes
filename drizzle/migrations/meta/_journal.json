@@ -50,6 +50,13 @@
       "when": 1792739267337,
       "tag": "0006_options_collection_twenty_minutes",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1792825000000,
+      "tag": "0007_admin_idempotencia_resultado",
+      "breakpoints": true
     }
   ]
 }
