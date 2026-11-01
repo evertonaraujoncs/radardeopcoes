@@ -525,8 +525,6 @@ export type Database = {
     }
     Functions: {
       claim_options_collection: { Args: { p_ticker: string }; Returns: Json }
-      is_admin: { Args: Record<PropertyKey, never>; Returns: boolean }
-      tornar_admin: { Args: { p_email: string }; Returns: string }
       finish_options_collection: {
         Args: {
           p_outcome: string
@@ -536,6 +534,8 @@ export type Database = {
         }
         Returns: Json
       }
+      is_admin: { Args: never; Returns: boolean }
+      tornar_admin: { Args: { p_email: string }; Returns: string }
     }
     Enums: {
       [_ in never]: never
