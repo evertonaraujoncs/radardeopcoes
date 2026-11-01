@@ -25,3 +25,10 @@
 - [x] Resultado no vencimento: liquidação automática com o fechamento do ativo, tela Resultados com taxa de acerto vs. probabilidade prevista.
 - [ ] Rodar `select public.tornar_admin('<seu e-mail>')` após aplicar a migration 0007.
 
+## Método (Manual Definitivo das Opções)
+- [x] Universo líquido, vencimentos mensais, filtros de IV Rank/Percentil, regra de 1/4, sem trava de crédito.
+- [x] Leitura técnica do ativo (médias, IFR, estocástico, suporte/resistência) e plano com stop/alvo no ativo.
+- [x] Pré-sinais: o que ainda não foi validado aparece com selo, score limitado e sem alerta.
+- [ ] THL, capital garantido sintético, fence/seagull, manejos e rolagem (ver docs/metodo.md).
+- [ ] Bid/ask real e 60+ pregões de IV para os sinais saírem do estado de pré-sinal.
+
