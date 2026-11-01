@@ -429,6 +429,8 @@ export interface Ctx {
   datas_balanco: Date[];
   ivr: number | null;
   ivp?: number | null;
+  /** "iv" = IV real das opções; "hv" = estimado pela volatilidade histórica do ativo (enquanto faltam pregões de IV). */
+  ivFonte?: "iv" | "hv" | null;
   tecnica?: AnaliseTecnica | null;
 }
 
@@ -473,6 +475,7 @@ export function avaliar(ativo: string, S0: number, estrategia: EstrategiaKey, ve
 
   // ---- tendência do ativo e volatilidade: reprovam quando há dado; sem dado, viram pendência ----
   const pend: string[] = [];
+  const pend_info: string[] = []; // avisos que não impedem a validação
   const tec = ctx.tecnica ?? null;
   if (tec) { if (!(TENDENCIA_PERMITIDA[estrategia] ?? []).includes(tec.tendencia)) return null; } else pend.push("tecnica_indisponivel");
   let textoVol: string | null = null;
@@ -480,7 +483,8 @@ export function avaliar(ativo: string, S0: number, estrategia: EstrategiaKey, ve
     const g = gateVolatilidade(est.perfil === "venda" ? "venda" : "compra", ctx.ivr, ctx.ivp);
     if (g.estado === "reprovado") return null;
     if (g.estado === "sem_historico") pend.push("iv_sem_historico");
-    textoVol = g.texto;
+    textoVol = ctx.ivFonte === "hv" && g.estado !== "sem_historico" ? `${g.texto} (estimado pela volatilidade histórica do ativo)` : g.texto;
+    if (ctx.ivFonte === "hv" && g.estado !== "sem_historico") pend_info.push("iv_por_hv");
   }
   if (opts.some(p => p.sem_bid_ask)) pend.push("preco_sem_bid_ask");
 
@@ -508,7 +512,7 @@ export function avaliar(ativo: string, S0: number, estrategia: EstrategiaKey, ve
       if (hoje < db && db <= venc) { riscos.push("balanco_antes_vencimento"); pen += 0.5; prox.push(Math.round((db.getTime() - hoje.getTime()) / 86400000)); break; }
     }
   }
-  riscos.push(...pend);
+  riscos.push(...pend, ...pend_info);
   if (Math.max(...opts.map(p => p.spread_pct)) > 0.5 * params.spread_max_pct / 100) riscos.push("spread_largo");
   const ne = 0.5 * newsC + 0.5 * (1 - clamp(pen));
 

@@ -189,6 +189,20 @@ describe("regras do método em estruturas montadas à mão", () => {
   });
 });
 
+describe("IV estimado por HV", () => {
+  it("valida com HV Rank, mas avisa; sem nenhum dos dois continua pré-sinal", async () => {
+    const linhas = cadeiaSintetica(hoje, vencMensal);
+    const sinais = await gerarSinais("PETR4", S0, linhas, { ...ctxBase, ivFonte: "hv" }, PARAMS_PADRAO, hoje, r);
+    expect(sinais.length).toBeGreaterThan(0);
+    for (const s of sinais) {
+      expect(s.riscos).toContain("iv_por_hv");
+      expect(s.riscos).not.toContain("iv_sem_historico");
+      expect(s.iv_rank).toBe(0.15);
+      expect(s.motivos.some((m) => m.includes("volatilidade histórica"))).toBe(true);
+    }
+  });
+});
+
 describe("IV Rank e Percentil", () => {
   const rows = (n: number, f: (i: number) => number) => Array.from({ length: n }, (_, i) => Array.from({ length: 3 }, () => ({
     data_coleta: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString(), iv: f(i), delta: 0.5,

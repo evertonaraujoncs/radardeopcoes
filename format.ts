@@ -55,6 +55,7 @@ export const RISCOS: Record<string, string> = {
   preco_sem_bid_ask: "Preço sem bid/ask (não validado)",
   iv_sem_historico: "IV Rank/Percentil indisponíveis (não validado)",
   tecnica_indisponivel: "Análise técnica indisponível (não validado)",
+  iv_por_hv: "IV Rank estimado pela volatilidade histórica",
   spread_largo: "Spread largo",
 };
 /** Riscos que significam "método ainda não validou": o sinal é um pré-sinal e não gera alerta. */

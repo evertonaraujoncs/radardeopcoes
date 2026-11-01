@@ -17,7 +17,9 @@ Regras baseadas no "Manual Definitivo das Opções" (Nobre Investidor). É uma m
 | Risco de débito ≤ 1,5% do capital; garantia ≤ capital | `avaliar` |
 | Plano da operação: stop e alvo no ATIVO, realizar ~70%, desmontar até a quarta do vencimento, nunca exercer | `montarPlano` |
 
-Sem IV Rank/Percentil (60+ pregões de histórico), sem leitura técnica ou sem bid/ask, o sinal vira **pré-sinal**: score limitado a 59, selo "não validado" e nenhum alerta (`SCORE_PRE_VALIDACAO`).
+**IV Rank sem histórico:** enquanto o banco não tem 60+ pregões de IV das opções, o motor usa HV Rank/Percentil (volatilidade de 21 pregões do ativo, comparada com o último ano, de `src/lib/hv.ts`) como substituto. Os sinais ficam com o aviso "IV Rank estimado pela volatilidade histórica" e passam para o IV real sozinhos quando o histórico completar.
+
+Sem IV Rank/Percentil (nem real, nem por HV), sem leitura técnica ou sem bid/ask, o sinal vira **pré-sinal**: score limitado a 59, selo "não validado" e nenhum alerta (`SCORE_PRE_VALIDACAO`).
 
 ## Pesos do score
 Retorno/risco 25, leitura técnica 20, probabilidade de lucro 15, IV Rank 15, liquidez 10, notícias e eventos 10, valuation 5. O método dá mais peso à assimetria do que à taxa de acerto: a probabilidade do modelo é neutra à direção e não enxerga a vantagem técnica, por isso o piso de probabilidade das travas de débito é só de sanidade (`POP_MIN_DEBITO`).

@@ -5,6 +5,7 @@ import { exigirAdmin } from "./admin";
 import { liquidarVencidos } from "./settlement";
 import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
+import { hvMetricas } from "./hv";
 import { analisarTecnica, candlesDe } from "./tecnica";
 import { gerarSinais, calcularAlertas, ivMetricas, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
@@ -65,8 +66,12 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     if (Array.isArray(p0.estrategias_ativas)) params.estrategias_ativas = (p0.estrategias_ativas as string[]).filter((k): k is EstrategiaKey => k in ESTRATEGIAS);
   }
   // Método: leitura técnica do ATIVO (tendência, suporte/resistência) e IV Rank/Percentil de pelo menos 60 pregões.
-  const tecnica = analisarTecnica(candlesDe(ativo.data?.historico_precos));
-  const iv = ivMetricas(hist.data ?? []);
+  const candles = candlesDe(ativo.data?.historico_precos);
+  const tecnica = analisarTecnica(candles);
+  // IV Rank real quando há 60+ pregões de IV; antes disso, HV Rank/Percentil do ativo (1 ano de preços) como substituto, sinalizado nos sinais.
+  const ivReal = ivMetricas(hist.data ?? []);
+  const hv = ivReal ? null : hvMetricas(candles);
+  const iv = ivReal ?? hv;
   const dy = num(fund.data?.[0]?.dy);
   const sents = ((news.data ?? []) as { sentimento: unknown }[]).map(n => num(n.sentimento)).filter((x): x is number => x !== null);
   const ctx: Ctx = {
@@ -77,6 +82,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     datas_balanco: ((evs.data ?? []) as { data: string; tipo: string }[]).filter(e => ["balanco", "resultados"].includes(e.tipo)).map(e => new Date(`${e.data}T00:00:00Z`)),
     ivr: iv?.rank ?? null,
     ivp: iv?.percentil ?? null,
+    ivFonte: ivReal ? "iv" : hv ? "hv" : null,
     tecnica,
   };
   const r = Math.log(1 + cdi.cdi);
@@ -108,7 +114,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const a = await db.from("alertas").insert(novosAlertas);
     if (a.error) throw new Error(a.error.message);
   }
-  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), tendencia: tecnica?.tendencia ?? null, ivDias: iv?.dias ?? null };
+  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), tendencia: tecnica?.tendencia ?? null, ivDias: iv?.dias ?? null, ivFonte: ivReal ? "iv" : hv ? "hv" : null };
 }
 
 async function optionCatalog() {
