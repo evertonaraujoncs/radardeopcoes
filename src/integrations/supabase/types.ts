@@ -69,6 +69,10 @@ export type Database = {
           atualizado_em: string
           fonte_preco: string | null
           historico_precos: Json | null
+          iv_atual: number | null
+          iv_atualizado_em: string | null
+          iv_percentil_1y: number | null
+          iv_rank_1y: number | null
           nome: string | null
           preco: number | null
           setor: string | null
@@ -78,6 +82,10 @@ export type Database = {
           atualizado_em?: string
           fonte_preco?: string | null
           historico_precos?: Json | null
+          iv_atual?: number | null
+          iv_atualizado_em?: string | null
+          iv_percentil_1y?: number | null
+          iv_rank_1y?: number | null
           nome?: string | null
           preco?: number | null
           setor?: string | null
@@ -87,6 +95,10 @@ export type Database = {
           atualizado_em?: string
           fonte_preco?: string | null
           historico_precos?: Json | null
+          iv_atual?: number | null
+          iv_atualizado_em?: string | null
+          iv_percentil_1y?: number | null
+          iv_rank_1y?: number | null
           nome?: string | null
           preco?: number | null
           setor?: string | null
@@ -405,6 +417,7 @@ export type Database = {
           motivos: Json | null
           perda_max: number | null
           pernas: Json
+          plano: Json | null
           preco_ativo: number | null
           preco_vencimento: number | null
           prob_lucro: number | null
@@ -436,6 +449,7 @@ export type Database = {
           motivos?: Json | null
           perda_max?: number | null
           pernas: Json
+          plano?: Json | null
           preco_ativo?: number | null
           preco_vencimento?: number | null
           prob_lucro?: number | null
@@ -467,6 +481,7 @@ export type Database = {
           motivos?: Json | null
           perda_max?: number | null
           pernas?: Json
+          plano?: Json | null
           preco_ativo?: number | null
           preco_vencimento?: number | null
           prob_lucro?: number | null
