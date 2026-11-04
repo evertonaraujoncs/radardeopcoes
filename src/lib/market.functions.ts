@@ -5,7 +5,7 @@ import { exigirAdmin } from "./admin";
 import { liquidarVencidos } from "./settlement";
 import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
-import { gerarSinais, calcularAlertas, ivRankSerie, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
+import { gerarSinais, calcularAlertas, ivRankSerie, selecionarIvRank, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
 const DEFASAGEM_DIAS = 4;
 
@@ -33,7 +33,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   const hoje = new Date(`${hojeStr}T00:00:00Z`);
   const desde = new Date(hoje.getTime() - DEFASAGEM_DIAS * 86400000).toISOString();
   const [ativo, grade, par, fund, divs, evs, news, hist, cdi] = await Promise.all([
-    db.from("ativos").select("preco").eq("ticker", ticker).maybeSingle(),
+    db.from("ativos").select("preco,iv_rank_1y,iv_atualizado_em").eq("ticker", ticker).maybeSingle(),
     db.from("opcoes_grade").select("ticker,tipo,strike,vencimento,bid,ask,ultimo,negocios,iv,delta,data_coleta").eq("ativo_base", ticker).gte("data_coleta", desde).limit(5000),
     userDb.from("parametros").select("*").order("updated_at", { ascending: false }).limit(1),
     db.from("fundamentos").select("dy,valuation_score").eq("ticker", ticker).order("data", { ascending: false }).limit(1),
@@ -65,16 +65,18 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   }
   const dy = num(fund.data?.[0]?.dy);
   const sents = ((news.data ?? []) as { sentimento: unknown }[]).map(n => num(n.sentimento)).filter((x): x is number => x !== null);
+  const iv = selecionarIvRank(ativo.data, ivRankSerie(hist.data ?? []));
   const ctx: Ctx = {
     q: dy === null ? 0 : dy > 1 ? dy / 100 : dy,
     valuation_score: num(fund.data?.[0]?.valuation_score),
     sentimento: sents.length ? sents.reduce((a, b) => a + b, 0) / sents.length : null,
     datas_com: ((divs.data ?? []) as { data_com: string }[]).map(d => new Date(`${d.data_com}T00:00:00Z`)),
     datas_balanco: ((evs.data ?? []) as { data: string; tipo: string }[]).filter(e => ["balanco", "resultados"].includes(e.tipo)).map(e => new Date(`${e.data}T00:00:00Z`)),
-    ivr: ivRankSerie(hist.data ?? []),
+    ivr: iv.rank,
   };
   const r = Math.log(1 + cdi.cdi);
   const sinais = await gerarSinais(ticker, S0, [...ultimas.values()], ctx, params, hoje, r);
+  if (iv.fonte === "oplab") for (const sinal of sinais) sinal.motivos.push("IV Rank de um ano fornecido pela OpLab");
 
   const agora = new Date().toISOString();
   const ex = await db.from("sinais").select("id,chave,score,ticker,estrategia").eq("status", "ativo").eq("ticker", ticker).gte("vencimento", hojeStr);
@@ -102,7 +104,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const a = await db.from("alertas").insert(novosAlertas);
     if (a.error) throw new Error(a.error.message);
   }
-  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")) };
+  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), ivFonte: iv.fonte };
 }
 
 async function optionCatalog() {
@@ -194,7 +196,19 @@ export const collectMarket = createServerFn({ method: "POST" })
       if (!response.ok) throw new Error(`Fonte retornou HTTP ${response.status}`);
       return response.json();
     };
-    try { if (!data.optionsOnly) {
+    let viaOplabPrecos = false, viaOplabOpcoes = false;
+    const oplabToken = process.env["OPLAB_ACCESS_TOKEN"];
+    if (oplabToken) {
+      const { coletarOplab } = await import("./oplab-collect.server");
+      try {
+        const collected = await coletarOplab(db, ticker, oplabToken, !!data.optionsOnly);
+        viaOplabPrecos = collected.precos; viaOplabOpcoes = collected.opcoes;
+        historyCount = collected.historyCount; optionsCount = collected.optionsCount;
+        warnings.push(...collected.warnings);
+        blocked = collected.blocked; retrySeconds = collected.retrySeconds;
+      } catch { warnings.push("OpLab: falha na coleta; usando Yahoo/Opções.net."); }
+    } else warnings.push("OpLab não configurada; usando Yahoo/Opções.net.");
+    try { if (!data.optionsOnly && !viaOplabPrecos) {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.SA?range=1y&interval=1d`;
       const payload = await json(url);
       const result = payload.chart?.result?.[0];
@@ -206,7 +220,8 @@ export const collectMarket = createServerFn({ method: "POST" })
       historyCount = history.length;
     }
     } catch (error) { warnings.push(`Cotações: ${error instanceof Error ? error.message : "falha na coleta"}`); }
-    try {
+    if (viaOplabOpcoes) { outcome = "success"; blocked = false; }
+    else try {
       const query = new URLSearchParams({ r0t: "LastQuotesInfo", r1t: "OptionsChain", "r1p.underlying_asset_id": ticker, "r1p.skip": "0", "r1p.load": "8", "r1p.columns_info": "true", "r1p.underlying_quotes": "true" });
       const payload = await optionsJson(`https://opcoes.net.br/api/v1?${query}`);
       const allRows = parseProviderChain(payload, ticker, now);
@@ -232,7 +247,7 @@ export const collectMarket = createServerFn({ method: "POST" })
       }
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
       if (allRows.some(row => row.bid === null || row.ask === null)) warnings.push("Ofertas: bid/ask não disponibilizados no acesso público de fechamento do Opções.net; gregas disponíveis são salvas, preços do motor sem ofertas continuam estimados.");
-      if (validatedQuotes) outcome = "success";
+      if (validatedQuotes) { outcome = "success"; blocked = false; }
       else warnings.push("Opções: a grade não contém cotações com data de negócio confirmada; dados e sinais existentes preservados.");
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
     const finished = await db.rpc("finish_options_collection", { p_ticker: ticker, p_token: token, p_outcome: blocked ? "blocked" : outcome, p_retry_seconds: retrySeconds });
@@ -275,12 +290,12 @@ export const collectMarket = createServerFn({ method: "POST" })
     try { if (canRecalculateSignals(blocked, outcome)) {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
-      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""})${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
+      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""}); IV Rank: ${m.ivFonte === "oplab" ? "OpLab, um ano" : "histórico disponível"}${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
     } else {
       motorNota = "Motor preservado: sinais existentes não foram recalculados ou encerrados sem uma grade validada nesta coleta.";
     }
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
-    const notes = `${liquidadosNota}${motorNota} Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. ${warnings.join("; ")}`;
+    const notes = `${liquidadosNota}${motorNota} ${viaOplabPrecos ? "OpLab" : "Yahoo Finance"}: ${historyCount} pregões (até 1 ano); Yahoo: ${newsCount} notícias e ${eventsCount} eventos novos; ${viaOplabOpcoes ? "OpLab" : "opcoes.net.br"}: ${optionsCount} cotações salvas, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
     return { ticker, signalsCount, historyCount, optionsCount, newsCount, eventsCount, warnings, notes, schedule, retry: finishData?.retry ?? false, circuit: finishData?.circuit ?? false, nextAt: finishData?.until };

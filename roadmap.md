@@ -5,6 +5,7 @@
 - [x] Verificar o sinal autenticado e esclarecer a cobertura real dos dados de mercado: tabelas vazias, nenhuma coleta histórica ampla comprovada.
 
 ## Coleta manual
+- [ ] Conectar a OpLab com o segredo existente, priorizar IV Rank de um ano e testar fallback das fontes atuais e coleta autenticada.
 - [x] Adicionar seleção dos 20 ativos mais líquidos com ranking verificável; seleção autenticada confirmada por volume financeiro estimado do último pregão (brapi).
 - [x] Disponibilizar compra de call a seco nos parâmetros e no motor, com testes de risco e payoff; salvamento e leitura confirmados, sinais reais gerados para ABEV3.
 - [x] Verificar campos de bid/ask e gregas públicos de opcoes.net.br e integrar somente dados reais acessíveis; coleta ABEV3 salvou 70 opções com IV/gregas e gerou 8 sinais. Bid/ask não liberados no fechamento público.

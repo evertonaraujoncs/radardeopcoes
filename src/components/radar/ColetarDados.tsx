@@ -63,7 +63,7 @@ export function ColetarDados() {
               if (!(await waitUntil(result.nextAt, ticker))) break;
               continue;
             }
-            setResults(previous => [...previous, `${ticker}: ${result.historyCount} pregões, ${result.optionsCount} opções, ${result.newsCount} notícias e ${result.eventsCount} eventos salvos, ${result.signalsCount} sinais calculados.${result.warnings.length ? ` ${result.warnings.join("; ")}` : ""}`]);
+            setResults(previous => [...previous, `${ticker}: ${result.notes}`]);
             await qc.invalidateQueries();
             if (result.circuit) {
               setResults(previous => [...previous, `Coleta interrompida após bloqueios consecutivos. Tente após ${result.nextAt ? new Date(result.nextAt).toLocaleString("pt-BR") : "a pausa"}.`]);
