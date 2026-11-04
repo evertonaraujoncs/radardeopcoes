@@ -557,6 +557,13 @@ export function ivRankSerie(rows: { data_coleta: string; iv: number | null; delt
   const lo = Math.min(...vals), hi = Math.max(...vals);
   return hi > lo ? (vals[vals.length - 1]! - lo) / (hi - lo) : 0.5;
 }
+/** Prefer the official one-year rank, including zero; never treat a stale snapshot as current. */
+export function selecionarIvRank(ativo: { iv_rank_1y?: number | null; iv_atualizado_em?: string | null } | null, historico: number | null, agora = Date.now()) {
+  const rank = ativo?.iv_rank_1y;
+  const time = ativo?.iv_atualizado_em ? Date.parse(ativo.iv_atualizado_em) : NaN;
+  if (typeof rank === "number" && Number.isFinite(rank) && rank >= 0 && rank <= 1 && Number.isFinite(time) && time <= agora && agora - time < 3 * 86400000) return { rank, fonte: "oplab" as const };
+  return { rank: historico, fonte: "historico" as const };
+}
 function mediana(v: number[]): number {
   const s = [...v].sort((a, b) => a - b);
   const m = Math.floor(s.length / 2);
