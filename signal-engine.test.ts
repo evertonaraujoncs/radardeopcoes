@@ -189,6 +189,18 @@ describe("regras do método em estruturas montadas à mão", () => {
   });
 });
 
+describe("IV Rank da OpLab", () => {
+  it("valida sem avisar de estimativa e cita a fonte no motivo", async () => {
+    const sinais = await gerarSinais("PETR4", S0, cadeiaSintetica(hoje, vencMensal), { ...ctxBase, ivFonte: "oplab" }, PARAMS_PADRAO, hoje, r);
+    expect(sinais.length).toBeGreaterThan(0);
+    for (const s of sinais) {
+      expect(s.riscos).not.toContain("iv_por_hv");
+      expect(s.riscos).not.toContain("iv_sem_historico");
+      expect(s.motivos.some((m) => m.includes("OpLab"))).toBe(true);
+    }
+  });
+});
+
 describe("IV estimado por HV", () => {
   it("valida com HV Rank, mas avisa; sem nenhum dos dois continua pré-sinal", async () => {
     const linhas = cadeiaSintetica(hoje, vencMensal);

@@ -429,8 +429,8 @@ export interface Ctx {
   datas_balanco: Date[];
   ivr: number | null;
   ivp?: number | null;
-  /** "iv" = IV real das opções; "hv" = estimado pela volatilidade histórica do ativo (enquanto faltam pregões de IV). */
-  ivFonte?: "iv" | "hv" | null;
+  /** "oplab" = IV Rank/Percentil de 1 ano da OpLab; "iv" = IV das opções no banco (60+ pregões); "hv" = estimado pela volatilidade histórica do ativo (enquanto faltam pregões de IV). */
+  ivFonte?: "oplab" | "iv" | "hv" | null;
   tecnica?: AnaliseTecnica | null;
 }
 
@@ -483,7 +483,7 @@ export function avaliar(ativo: string, S0: number, estrategia: EstrategiaKey, ve
     const g = gateVolatilidade(est.perfil === "venda" ? "venda" : "compra", ctx.ivr, ctx.ivp);
     if (g.estado === "reprovado") return null;
     if (g.estado === "sem_historico") pend.push("iv_sem_historico");
-    textoVol = ctx.ivFonte === "hv" && g.estado !== "sem_historico" ? `${g.texto} (estimado pela volatilidade histórica do ativo)` : g.texto;
+    textoVol = g.estado === "sem_historico" ? g.texto : ctx.ivFonte === "hv" ? `${g.texto} (estimado pela volatilidade histórica do ativo)` : ctx.ivFonte === "oplab" ? `${g.texto} (OpLab, 1 ano)` : g.texto;
     if (ctx.ivFonte === "hv" && g.estado !== "sem_historico") pend_info.push("iv_por_hv");
   }
   if (opts.some(p => p.sem_bid_ask)) pend.push("preco_sem_bid_ask");

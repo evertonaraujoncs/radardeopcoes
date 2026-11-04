@@ -6,6 +6,8 @@ import { liquidarVencidos } from "./settlement";
 import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
 import { hvMetricas } from "./hv";
+import { coletarOplab } from "./oplab-collect";
+import { oplabConfigurado } from "./oplab";
 import { analisarTecnica, candlesDe } from "./tecnica";
 import { gerarSinais, calcularAlertas, ivMetricas, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
@@ -35,7 +37,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   const hoje = new Date(`${hojeStr}T00:00:00Z`);
   const desde = new Date(hoje.getTime() - DEFASAGEM_DIAS * 86400000).toISOString();
   const [ativo, grade, par, fund, divs, evs, news, hist, cdi] = await Promise.all([
-    db.from("ativos").select("preco,historico_precos").eq("ticker", ticker).maybeSingle(),
+    db.from("ativos").select("preco,historico_precos,iv_rank_1y,iv_percentil_1y,iv_atualizado_em").eq("ticker", ticker).maybeSingle(),
     db.from("opcoes_grade").select("ticker,tipo,strike,vencimento,bid,ask,ultimo,negocios,iv,delta,data_coleta").eq("ativo_base", ticker).gte("data_coleta", desde).limit(5000),
     userDb.from("parametros").select("*").order("updated_at", { ascending: false }).limit(1),
     db.from("fundamentos").select("dy,valuation_score").eq("ticker", ticker).order("data", { ascending: false }).limit(1),
@@ -70,8 +72,12 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   const tecnica = analisarTecnica(candles);
   // IV Rank real quando há 60+ pregões de IV; antes disso, HV Rank/Percentil do ativo (1 ano de preços) como substituto, sinalizado nos sinais.
   const ivReal = ivMetricas(hist.data ?? []);
-  const hv = ivReal ? null : hvMetricas(candles);
-  const iv = ivReal ?? hv;
+  // IV Rank/Percentil oficiais da OpLab, se coletados nos últimos 3 dias, têm prioridade.
+  const op = ativo.data as { iv_rank_1y?: number | null; iv_percentil_1y?: number | null; iv_atualizado_em?: string | null } | null;
+  const oplab = op?.iv_rank_1y != null && op?.iv_percentil_1y != null && op?.iv_atualizado_em && Date.now() - Date.parse(op.iv_atualizado_em) < 3 * 86400000
+    ? { rank: Number(op.iv_rank_1y), percentil: Number(op.iv_percentil_1y), dias: 252 } : null;
+  const hv = ivReal || oplab ? null : hvMetricas(candles);
+  const iv = oplab ?? ivReal ?? hv;
   const dy = num(fund.data?.[0]?.dy);
   const sents = ((news.data ?? []) as { sentimento: unknown }[]).map(n => num(n.sentimento)).filter((x): x is number => x !== null);
   const ctx: Ctx = {
@@ -82,7 +88,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     datas_balanco: ((evs.data ?? []) as { data: string; tipo: string }[]).filter(e => ["balanco", "resultados"].includes(e.tipo)).map(e => new Date(`${e.data}T00:00:00Z`)),
     ivr: iv?.rank ?? null,
     ivp: iv?.percentil ?? null,
-    ivFonte: ivReal ? "iv" : hv ? "hv" : null,
+    ivFonte: oplab ? "oplab" : ivReal ? "iv" : hv ? "hv" : null,
     tecnica,
   };
   const r = Math.log(1 + cdi.cdi);
@@ -114,7 +120,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const a = await db.from("alertas").insert(novosAlertas);
     if (a.error) throw new Error(a.error.message);
   }
-  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), tendencia: tecnica?.tendencia ?? null, ivDias: iv?.dias ?? null, ivFonte: ivReal ? "iv" : hv ? "hv" : null };
+  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), tendencia: tecnica?.tendencia ?? null, ivDias: iv?.dias ?? null, ivFonte: oplab ? "oplab" : ivReal ? "iv" : hv ? "hv" : null };
 }
 
 async function optionCatalog() {
@@ -206,7 +212,16 @@ export const collectMarket = createServerFn({ method: "POST" })
       if (!response.ok) throw new Error(`Fonte retornou HTTP ${response.status}`);
       return response.json();
     };
-    try { if (!data.optionsOnly) {
+    // Fonte preferida: OpLab (bid/ask reais e IV Rank oficial). Sem token ou em caso de falha, valem Yahoo (preços) e opcoes.net.br (opções).
+    let viaOplabPrecos = false, viaOplabOpcoes = false;
+    if (oplabConfigurado()) {
+      try {
+        const o = await coletarOplab(db, ticker, { optionsOnly: !!data.optionsOnly });
+        historyCount += o.historyCount; optionsCount += o.optionsCount; validatedQuotes += o.cotacoes;
+        viaOplabPrecos = o.precos; viaOplabOpcoes = o.opcoes; warnings.push(...o.warnings);
+      } catch (error) { warnings.push(`OpLab: ${error instanceof Error ? error.message : "falha na coleta"}`); }
+    }
+    try { if (!data.optionsOnly && !viaOplabPrecos) {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.SA?range=1y&interval=1d`;
       const payload = await json(url);
       const result = payload.chart?.result?.[0];
@@ -218,6 +233,7 @@ export const collectMarket = createServerFn({ method: "POST" })
       historyCount = history.length;
     }
     } catch (error) { warnings.push(`Cotações: ${error instanceof Error ? error.message : "falha na coleta"}`); }
+    if (viaOplabOpcoes) { outcome = "success"; } else {
     try {
       const query = new URLSearchParams({ r0t: "LastQuotesInfo", r1t: "OptionsChain", "r1p.underlying_asset_id": ticker, "r1p.skip": "0", "r1p.load": "8", "r1p.columns_info": "true", "r1p.underlying_quotes": "true" });
       const payload = await optionsJson(`https://opcoes.net.br/api/v1?${query}`);
@@ -247,6 +263,7 @@ export const collectMarket = createServerFn({ method: "POST" })
       if (validatedQuotes) outcome = "success";
       else warnings.push("Opções: a grade não contém cotações com data de negócio confirmada; dados e sinais existentes preservados.");
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
+    }
     const finished = await db.rpc("finish_options_collection", { p_ticker: ticker, p_token: token, p_outcome: blocked ? "blocked" : outcome, p_retry_seconds: retrySeconds });
     if (finished.error) throw new Error("Não foi possível registrar a pausa da coleta; aguarde cinco minutos antes de tentar novamente.");
     const finishData = finished.data as { until?: string; retry?: boolean; circuit?: boolean } | null;
@@ -292,7 +309,7 @@ export const collectMarket = createServerFn({ method: "POST" })
       motorNota = "Motor preservado: sinais existentes não foram recalculados ou encerrados sem uma grade validada nesta coleta.";
     }
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
-    const notes = `${liquidadosNota}${motorNota} Yahoo Finance: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; opcoes.net.br: ${optionsCount} novas cotações, até 3 vencimentos. ${warnings.join("; ")}`;
+    const notes = `${liquidadosNota}${motorNota} ${viaOplabPrecos ? "OpLab" : "Yahoo Finance"}: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; ${viaOplabOpcoes ? "OpLab" : "opcoes.net.br"}: ${optionsCount} cotações, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
     return { ticker, signalsCount, historyCount, optionsCount, newsCount, eventsCount, warnings, notes, schedule, retry: finishData?.retry ?? false, circuit: finishData?.circuit ?? false, nextAt: finishData?.until };

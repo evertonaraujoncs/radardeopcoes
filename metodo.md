@@ -17,6 +17,8 @@ Regras baseadas no "Manual Definitivo das Opções" (Nobre Investidor). É uma m
 | Risco de débito ≤ 1,5% do capital; garantia ≤ capital | `avaliar` |
 | Plano da operação: stop e alvo no ATIVO, realizar ~70%, desmontar até a quarta do vencimento, nunca exercer | `montarPlano` |
 
+**Fonte dos dados:** com o segredo `OPLAB_ACCESS_TOKEN` configurado, a coleta usa a OpLab (`src/lib/oplab.ts`, `oplab-collect.ts`) para preço, histórico, bid/ask reais e IV Rank/Percentil de 1 ano. Sem o segredo, ou se a OpLab falhar, valem Yahoo (preços) e opcoes.net.br (opções). O IV Rank oficial da OpLab tem prioridade sobre o histórico próprio e sobre a HV. Segredos opcionais: `OPLAB_EMAIL` e `OPLAB_PASSWORD` (renovam o token, que vale ~2 semanas) e `OPLAB_API_URL`. O token nunca vai para o código nem para o navegador.
+
 **IV Rank sem histórico:** enquanto o banco não tem 60+ pregões de IV das opções, o motor usa HV Rank/Percentil (volatilidade de 21 pregões do ativo, comparada com o último ano, de `src/lib/hv.ts`) como substituto. Os sinais ficam com o aviso "IV Rank estimado pela volatilidade histórica" e passam para o IV real sozinhos quando o histórico completar.
 
 Sem IV Rank/Percentil (nem real, nem por HV), sem leitura técnica ou sem bid/ask, o sinal vira **pré-sinal**: score limitado a 59, selo "não validado" e nenhum alerta (`SCORE_PRE_VALIDACAO`).
