@@ -405,6 +405,7 @@ export type Database = {
           motivos: Json | null
           perda_max: number | null
           pernas: Json
+          plano: Json | null
           preco_ativo: number | null
           preco_vencimento: number | null
           prob_lucro: number | null
@@ -436,6 +437,7 @@ export type Database = {
           motivos?: Json | null
           perda_max?: number | null
           pernas: Json
+          plano?: Json | null
           preco_ativo?: number | null
           preco_vencimento?: number | null
           prob_lucro?: number | null
@@ -467,6 +469,7 @@ export type Database = {
           motivos?: Json | null
           perda_max?: number | null
           pernas?: Json
+          plano?: Json | null
           preco_ativo?: number | null
           preco_vencimento?: number | null
           prob_lucro?: number | null
