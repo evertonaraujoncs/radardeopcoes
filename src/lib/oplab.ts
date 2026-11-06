@@ -20,8 +20,8 @@ export function parseAcao(payload: unknown, ticker: string) {
   const iv = positive(o["iv_current"]);
   return { ticker, nome: typeof o["name"] === "string" ? o["name"] : ticker, preco, time,
     ivAtual: iv === null ? null : iv / 100,
-    ivRank1y: iv === null ? null : percent(o["iv_"]1y_rank),
-    ivPercentil1y: iv === null ? null : percent(o["iv_"]1y_percentile) };
+    ivRank1y: iv === null ? null : percent(o["iv_1y_rank"]),
+    ivPercentil1y: iv === null ? null : percent(o["iv_1y_percentile"]) };
 }
 export function parseHistorico(payload: unknown, ticker: string) {
   const o = obj(payload);
