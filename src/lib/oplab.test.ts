@@ -10,7 +10,8 @@ const now = Date.parse("2026-11-04T03:12:00Z");
 
 describe("OpLab contract and rank priority", () => {
   it("uses the confirmed percentage contract, even for ranks below one percent", () => {
-    expect(parseAcao(stock, "PETR4")).toMatchObject({ preco: 50.71, ivRank1y: 0.5137, ivPercentil1y: 0.5675, ivAtual: 0.3465, time });
+    expect(parseAcao(stock, "PETR4")).toMatchObject({ preco: 50.71, ivPercentil1y: 0.5675, ivAtual: 0.3465, time });
+    expect(parseAcao(stock, "PETR4").ivRank1y).toBeCloseTo(0.5137, 9);
     expect(parseAcao({ ...stock, iv_1y_rank: 0.4 }, "PETR4").ivRank1y).toBe(0.004);
   });
   it("prefers the one-year rank over local rank and accepts zero without percentile", () => {
@@ -43,7 +44,9 @@ describe("OpLab collection fallback", () => {
       const get = async (path: string) => path.includes("/stocks/") ? stock : path.includes("/options/") ? chain : { symbol: "PETR4", data: Array.from({ length: 80 }, (_, i) => ({ time: now - i * 86400000, close: 50 })) };
       const result = await coletarOplab(db, "PETR4", "test-only", false, get);
       expect(result).toMatchObject({ precos: true, opcoes: true, historyCount: 80, optionsCount: 5 });
-      expect(writes.find(w => w.table === "ativos")?.value).toMatchObject({ iv_rank_1y: 0.5137, iv_atualizado_em: time, atualizado_em: time });
+      const asset = writes.find(w => w.table === "ativos")?.value as { iv_rank_1y: number } | undefined;
+      expect(asset).toMatchObject({ iv_atualizado_em: time, atualizado_em: time });
+      expect(asset?.iv_rank_1y).toBeCloseTo(0.5137, 9);
       expect(writes.find(w => w.table === "opcoes_grade")?.value).toHaveLength(5);
     } finally { vi.useRealTimers(); }
   });
@@ -60,6 +63,6 @@ describe("OpLab collection fallback", () => {
     const result = await coletarOplab(db, "PETR4", "test-only", false, async path => { if (path.includes("/stocks/")) return stock; throw new OplabError("Unavailable", 500); });
     expect(result).toMatchObject({ precos: false, opcoes: false, optionsCount: 0, historyCount: 0 });
     expect(writes).toHaveLength(1);
-    expect(writes[0]?.value).toMatchObject({ iv_rank_1y: 0.5137 });
+    expect((writes[0]?.value as { iv_rank_1y: number }).iv_rank_1y).toBeCloseTo(0.5137, 9);
   });
 });
