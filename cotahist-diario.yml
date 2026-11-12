@@ -1,0 +1,33 @@
+name: COTAHIST diário (B3)
+
+# Importa o arquivo gratuito da B3 (bid/ask do fechamento, negócios, IV e delta das opções) para o Radar de Opções.
+# Segredos do repositório (Settings > Secrets and variables > Actions): INGEST_KEY (o mesmo do app).
+# Variável do repositório (aba Variables), opcional: RADAR_URL (padrão https://radardeopcoes.lovable.app).
+
+on:
+  schedule:
+    - cron: "30 22 * * 1-5" # 19:30 em Brasília, depois do fechamento e da publicação do arquivo
+  workflow_dispatch:
+    inputs:
+      meses:
+        description: "Histórico: quantos arquivos mensais baixar (0 = só o diário). Use 12 uma vez para montar o IV Rank."
+        default: "0"
+
+jobs:
+  importar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - name: Histórico mensal (manual)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.meses != '0' }}
+        run: bun scripts/importar-cotahist.ts --baixar-meses ${{ inputs.meses }}
+        env:
+          INGEST_KEY: ${{ secrets.INGEST_KEY }}
+          RADAR_URL: ${{ vars.RADAR_URL }}
+      - name: Arquivo diário
+        run: bun scripts/importar-cotahist.ts --baixar-ultimo
+        env:
+          INGEST_KEY: ${{ secrets.INGEST_KEY }}
+          RADAR_URL: ${{ vars.RADAR_URL }}
