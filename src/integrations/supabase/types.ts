@@ -106,6 +106,96 @@ export type Database = {
         }
         Relationships: []
       }
+      carteira: {
+        Row: {
+          atualizado_em: string
+          capital_base: number | null
+          chave: string
+          cobertura: string
+          credito_debito_entrada: number
+          entrada_em: string
+          estrategia: string
+          id: number
+          perda_max_entrada: number | null
+          pernas: Json
+          pernas_atuais: Json | null
+          preco_ativo_atual: number | null
+          preco_ativo_entrada: number
+          preco_estimado: boolean
+          premio_atual: number | null
+          prob_lucro_atual: number | null
+          prob_lucro_entrada: number | null
+          resultado: number
+          retorno_pct: number | null
+          retorno_risco_entrada: number | null
+          score_atual: number | null
+          score_entrada: number | null
+          sinal_ativo: boolean
+          sinal_id: number | null
+          ticker: string
+          user_id: string
+          vencimento: string
+        }
+        Insert: {
+          atualizado_em?: string
+          capital_base?: number | null
+          chave: string
+          cobertura?: string
+          credito_debito_entrada: number
+          entrada_em?: string
+          estrategia: string
+          id?: never
+          perda_max_entrada?: number | null
+          pernas: Json
+          pernas_atuais?: Json | null
+          preco_ativo_atual?: number | null
+          preco_ativo_entrada: number
+          preco_estimado?: boolean
+          premio_atual?: number | null
+          prob_lucro_atual?: number | null
+          prob_lucro_entrada?: number | null
+          resultado?: number
+          retorno_pct?: number | null
+          retorno_risco_entrada?: number | null
+          score_atual?: number | null
+          score_entrada?: number | null
+          sinal_ativo?: boolean
+          sinal_id?: number | null
+          ticker: string
+          user_id: string
+          vencimento: string
+        }
+        Update: {
+          atualizado_em?: string
+          capital_base?: number | null
+          chave?: string
+          cobertura?: string
+          credito_debito_entrada?: number
+          entrada_em?: string
+          estrategia?: string
+          id?: never
+          perda_max_entrada?: number | null
+          pernas?: Json
+          pernas_atuais?: Json | null
+          preco_ativo_atual?: number | null
+          preco_ativo_entrada?: number
+          preco_estimado?: boolean
+          premio_atual?: number | null
+          prob_lucro_atual?: number | null
+          prob_lucro_entrada?: number | null
+          resultado?: number
+          retorno_pct?: number | null
+          retorno_risco_entrada?: number | null
+          score_atual?: number | null
+          score_entrada?: number | null
+          sinal_ativo?: boolean
+          sinal_id?: number | null
+          ticker?: string
+          user_id?: string
+          vencimento?: string
+        }
+        Relationships: []
+      }
       dividendos: {
         Row: {
           data_com: string

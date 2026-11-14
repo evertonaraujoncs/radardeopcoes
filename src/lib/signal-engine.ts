@@ -578,9 +578,9 @@ export interface Alerta { chave: string; tipo: string; mensagem: string }
 export function calcularAlertas(
   existentes: Map<string, { id: number; score: number | null; ticker: string; estrategia: string }>,
   novos: Map<string, Sinal>,
-): { alertas: Alerta[]; encerrar: string[] } {
+): { alertas: Alerta[]; remover: string[] } {
   const alertas: Alerta[] = [];
-  const encerrar = [...existentes.keys()].filter(k => !novos.has(k));
+  const remover = [...existentes.keys()].filter(k => !novos.has(k));
   const fmtVenc = (v: string) => { const [, m, d] = v.split("-"); return `${d}/${m}`; };
   for (const [k, s] of novos) {
     const base = `${s.nome} em ${s.ticker} (venc. ${fmtVenc(s.vencimento)})`;
@@ -595,9 +595,5 @@ export function calcularAlertas(
       alertas.push({ chave: k, tipo: "evento_proximo", mensagem: `Evento em ${s.dias_ate_evento} dia(s) antes do vencimento: ${base} (${s.riscos.join(", ")}).` });
     }
   }
-  for (const k of encerrar) {
-    const e = existentes.get(k)!;
-    if ((e.score ?? 0) >= ALERTA_SCORE) alertas.push({ chave: k, tipo: "encerrado", mensagem: `Sinal encerrado: ${e.estrategia} em ${e.ticker} deixou de valer.` });
-  }
-  return { alertas, encerrar };
+  return { alertas, remover };
 }

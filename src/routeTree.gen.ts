@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedAlertasRouteImport } from './routes/_authenticated/alertas'
+import { Route as AuthenticatedCarteiraRouteImport } from './routes/_authenticated/carteira'
 import { Route as AuthenticatedParametrosRouteImport } from './routes/_authenticated/parametros'
 import { Route as AuthenticatedRadarRouteImport } from './routes/_authenticated/radar'
 import { Route as AuthenticatedResultadosRouteImport } from './routes/_authenticated/resultados'
@@ -38,6 +39,11 @@ const AuthRoute = AuthRouteImport.update({
 const AuthenticatedAlertasRoute = AuthenticatedAlertasRouteImport.update({
   id: '/alertas',
   path: '/alertas',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const AuthenticatedCarteiraRoute = AuthenticatedCarteiraRouteImport.update({
+  id: '/carteira',
+  path: '/carteira',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
 const AuthenticatedParametrosRoute = AuthenticatedParametrosRouteImport.update({
@@ -81,6 +87,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/alertas': typeof AuthenticatedAlertasRoute
+  '/carteira': typeof AuthenticatedCarteiraRoute
   '/parametros': typeof AuthenticatedParametrosRoute
   '/radar': typeof AuthenticatedRadarRoute
   '/resultados': typeof AuthenticatedResultadosRoute
@@ -93,6 +100,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/auth': typeof AuthRoute
   '/alertas': typeof AuthenticatedAlertasRoute
+  '/carteira': typeof AuthenticatedCarteiraRoute
   '/parametros': typeof AuthenticatedParametrosRoute
   '/radar': typeof AuthenticatedRadarRoute
   '/resultados': typeof AuthenticatedResultadosRoute
@@ -107,6 +115,7 @@ export interface FileRoutesById {
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
   '/auth': typeof AuthRoute
   '/_authenticated/alertas': typeof AuthenticatedAlertasRoute
+  '/_authenticated/carteira': typeof AuthenticatedCarteiraRoute
   '/_authenticated/parametros': typeof AuthenticatedParametrosRoute
   '/_authenticated/radar': typeof AuthenticatedRadarRoute
   '/_authenticated/resultados': typeof AuthenticatedResultadosRoute
@@ -121,6 +130,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/alertas'
+    | '/carteira'
     | '/parametros'
     | '/radar'
     | '/resultados'
@@ -133,6 +143,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/alertas'
+    | '/carteira'
     | '/parametros'
     | '/radar'
     | '/resultados'
@@ -146,6 +157,7 @@ export interface FileRouteTypes {
     | '/_authenticated'
     | '/auth'
     | '/_authenticated/alertas'
+    | '/_authenticated/carteira'
     | '/_authenticated/parametros'
     | '/_authenticated/radar'
     | '/_authenticated/resultados'
@@ -190,6 +202,13 @@ declare module '@tanstack/react-router' {
       path: '/alertas'
       fullPath: '/alertas'
       preLoaderRoute: typeof AuthenticatedAlertasRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/carteira': {
+      id: '/_authenticated/carteira'
+      path: '/carteira'
+      fullPath: '/carteira'
+      preLoaderRoute: typeof AuthenticatedCarteiraRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/parametros': {
@@ -246,6 +265,7 @@ declare module '@tanstack/react-router' {
 
 interface AuthenticatedRouteRouteChildren {
   AuthenticatedAlertasRoute: typeof AuthenticatedAlertasRoute
+  AuthenticatedCarteiraRoute: typeof AuthenticatedCarteiraRoute
   AuthenticatedParametrosRoute: typeof AuthenticatedParametrosRoute
   AuthenticatedRadarRoute: typeof AuthenticatedRadarRoute
   AuthenticatedResultadosRoute: typeof AuthenticatedResultadosRoute
@@ -256,6 +276,7 @@ interface AuthenticatedRouteRouteChildren {
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedAlertasRoute: AuthenticatedAlertasRoute,
+  AuthenticatedCarteiraRoute: AuthenticatedCarteiraRoute,
   AuthenticatedParametrosRoute: AuthenticatedParametrosRoute,
   AuthenticatedRadarRoute: AuthenticatedRadarRoute,
   AuthenticatedResultadosRoute: AuthenticatedResultadosRoute,

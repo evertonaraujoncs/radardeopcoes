@@ -138,7 +138,7 @@ describe("geração de sinais", () => {
 });
 
 describe("alertas e IV Rank", () => {
-  it("novo, score subiu e encerrado", () => {
+  it("novo, score subiu e sinal antigo removido sem alerta órfão", () => {
     const ex = new Map<string, { id: number; score: number | null; ticker: string; estrategia: string }>([
       ["a", { id: 1, score: 60, ticker: "PETR4", estrategia: "x" }],
       ["b", { id: 2, score: 80, ticker: "PETR4", estrategia: "iron_condor" }],
@@ -148,9 +148,9 @@ describe("alertas e IV Rank", () => {
       ["a", { ...base, score: 75 } as unknown as Sinal],
       ["c", { ...base, score: 72 } as unknown as Sinal],
     ]);
-    const { alertas, encerrar } = calcularAlertas(ex, nv);
-    expect(alertas.map(a => a.tipo).sort()).toEqual(["encerrado", "novo", "score_subiu"]);
-    expect(encerrar).toEqual(["b"]);
+    const { alertas, remover } = calcularAlertas(ex, nv);
+    expect(alertas.map(a => a.tipo).sort()).toEqual(["novo", "score_subiu"]);
+    expect(remover).toEqual(["b"]);
   });
   it("IV Rank da série diária", () => {
     const rows = Array.from({ length: 28 }, (_, i) => Array.from({ length: 3 }, () => ({

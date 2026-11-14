@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigirAdmin } from "./admin";
 import { liquidarVencidos } from "./settlement";
+import { apagarSinaisInvalidos } from "./signal-maintenance";
 import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
 import { gerarSinais, calcularAlertas, ivRankSerie, selecionarIvRank, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
@@ -83,7 +84,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   if (ex.error) throw new Error(ex.error.message);
   const existentes = new Map<string, { id: number; score: number | null; ticker: string; estrategia: string }>((ex.data ?? []).map((e: { chave: string; id: number; score: number | null; ticker: string; estrategia: string }) => [e.chave, e]));
   const novos = new Map(sinais.map(s => [s.chave, s]));
-  const { alertas, encerrar } = calcularAlertas(existentes, novos);
+  const { alertas, remover } = calcularAlertas(existentes, novos);
   const ids = new Map<string, number>([...existentes].map(([k, e]) => [k, e.id]));
   if (sinais.length) {
     const rows = sinais.map(s => ({ chave: s.chave, ticker: s.ticker, estrategia: s.estrategia, vencimento: s.vencimento, pernas: s.pernas, dias_vencimento: s.dias_vencimento, preco_ativo: s.preco_ativo, credito_debito: s.credito_debito, lucro_max: s.lucro_max, perda_max: s.perda_max, breakevens: s.breakevens, prob_lucro: s.prob_lucro, valor_esperado: s.valor_esperado, retorno_sobre_risco: s.retorno_sobre_risco, iv_rank: s.iv_rank, score: s.score, fatores: s.fatores, gregas: s.gregas, curva_payoff: s.curva_payoff, motivos: s.motivos, riscos: s.riscos, status: "ativo", atualizado_em: agora }));
@@ -93,10 +94,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const h = await db.from("sinais_historico").insert(sinais.filter(s => ids.has(s.chave)).map(s => ({ sinal_id: ids.get(s.chave), score: s.score, prob_lucro: s.prob_lucro, preco_ativo: s.preco_ativo })));
     if (h.error) throw new Error(h.error.message);
   }
-  if (encerrar.length) {
-    const e = await db.from("sinais").update({ status: "encerrado", motivo_encerramento: "deixou_de_valer", encerrado_em: agora, atualizado_em: agora }).eq("status", "ativo").in("chave", encerrar);
-    if (e.error) throw new Error(e.error.message);
-  }
+  const removidos = await apagarSinaisInvalidos(db, remover);
   const feitos = await db.from("alertas").select("sinal_id,tipo").gte("criado_em", `${hojeStr}T00:00:00`);
   const ja = new Set(((feitos.data ?? []) as { sinal_id: number; tipo: string }[]).map(a => `${a.sinal_id}:${a.tipo}`));
   const novosAlertas = alertas.filter(a => ids.has(a.chave) && !ja.has(`${ids.get(a.chave)}:${a.tipo}`)).map(a => ({ sinal_id: ids.get(a.chave), tipo: a.tipo, mensagem: a.mensagem }));
@@ -104,7 +102,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const a = await db.from("alertas").insert(novosAlertas);
     if (a.error) throw new Error(a.error.message);
   }
-  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), ivFonte: iv.fonte };
+  return { sinais: sinais.length, removidos, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), ivFonte: iv.fonte };
 }
 
 async function optionCatalog() {

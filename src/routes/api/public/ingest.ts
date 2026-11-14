@@ -3,6 +3,7 @@ import { z } from "zod";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import { deduplicarPorChave } from "@/lib/dedupe";
 import { diaSP, liquidarVencidos } from "@/lib/settlement";
+import { atualizarCarteira } from "@/lib/carteira.server";
 
 /**
  * Endpoint de ingestão para o robô (motor_sinais.py).
