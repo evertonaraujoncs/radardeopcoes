@@ -1,10 +1,10 @@
 ## Carteira e filtros do Radar
-- [ ] Apagar sinais ativos que deixam de ser gerados após uma coleta validada, sem apagar resultados de vencimento.
-- [ ] Criar carteira privada por usuário com snapshot da entrada, botão Entrar no Radar e navegação para a nova aba.
-- [ ] Atualizar lucro/prejuízo por lote após as coletas, usando bid/ask de saída ou último negócio identificado como estimativa; preservar o último valor quando a cobertura estiver incompleta.
-- [ ] Adicionar dashboard e cards da carteira com dados de entrada, valores atuais, resultado e situação do sinal.
-- [ ] Aplicar os filtros do Radar somente ao clicar em Buscar.
-- [ ] Testar cálculos, permissões e o fluxo autenticado de entrada e atualização da carteira.
+- [x] Apagar sinais ativos que deixam de ser gerados após uma coleta validada, sem apagar resultados de vencimento.
+- [x] Criar carteira privada por usuário com snapshot da entrada, botão Entrar no Radar e navegação para a nova aba.
+- [x] Atualizar lucro/prejuízo por lote após as coletas, usando bid/ask de saída ou último negócio identificado como estimativa; preservar o último valor quando a cobertura estiver incompleta.
+- [x] Adicionar dashboard e cards da carteira com dados de entrada, valores atuais, resultado e situação do sinal.
+- [x] Aplicar os filtros do Radar somente ao clicar em Buscar.
+- [x] Testar cálculos, permissões e o fluxo autenticado de entrada e atualização da carteira.
 
 ## Correções do detalhe do sinal
 - [x] Normalizar as pernas recebidas e apresentar compra/venda, quantidade, strike e prêmio com clareza.

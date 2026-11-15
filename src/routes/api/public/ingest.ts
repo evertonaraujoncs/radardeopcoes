@@ -167,6 +167,22 @@ export const Route = createFileRoute("/api/public/ingest")({
           resultado["aviso_liquidacao"] = e instanceof Error ? e.message : "falha";
         }
 
+        // A carteira guarda a entrada e usa apenas os preços validados recebidos nesta ingestão.
+        try {
+          const tickers = new Set<string>();
+          for (const rows of [p.ativos, p.opcoes_grade, p.sinais]) {
+            for (const row of (rows ?? []) as Record<string, unknown>[]) {
+              const value = row["ativo_base"] ?? row["ticker"];
+              if (typeof value === "string" && value) tickers.add(value);
+            }
+          }
+          let atualizadas = 0;
+          for (const ticker of tickers) atualizadas += (await atualizarCarteira(supabaseAdmin, ticker)).atualizadas;
+          if (atualizadas) resultado["carteira_atualizada"] = atualizadas;
+        } catch (e) {
+          resultado["aviso_carteira"] = e instanceof Error ? e.message : "falha";
+        }
+
         return Response.json({ ok: true, gravados: resultado });
       },
     },

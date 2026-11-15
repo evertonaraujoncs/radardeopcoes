@@ -280,20 +280,27 @@ export const collectMarket = createServerFn({ method: "POST" })
     let signalsCount = 0;
     let motorNota = "";
     let liquidadosNota = "";
+    let carteiraNota = "";
+    const coletaValidada = canRecalculateSignals(blocked, outcome);
     try {
       const l = await liquidarVencidos(db, { ticker });
       if (l.liquidados) liquidadosNota = `${l.liquidados} sinal(is) vencido(s) liquidado(s) com o fechamento do vencimento. `;
       if (l.pendentes) warnings.push(`${l.pendentes} sinal(is) vencido(s) aguardando o preço de fechamento do vencimento`);
     } catch (error) { warnings.push(`Liquidação de vencimentos: ${error instanceof Error ? error.message : "falha"}`); }
-    try { if (canRecalculateSignals(blocked, outcome)) {
+    try { if (coletaValidada) {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
-      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""}); IV Rank: ${m.ivFonte === "oplab" ? "OpLab, um ano" : "histórico disponível"}${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
+      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.removidos} removidos por perda de validade, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""}); IV Rank: ${m.ivFonte === "oplab" ? "OpLab, um ano" : "histórico disponível"}${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
     } else {
-      motorNota = "Motor preservado: sinais existentes não foram recalculados ou encerrados sem uma grade validada nesta coleta.";
+      motorNota = "Motor preservado: sinais existentes não foram recalculados ou removidos sem uma grade validada nesta coleta.";
     }
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
-    const notes = `${liquidadosNota}${motorNota} ${viaOplabPrecos ? "OpLab" : "Yahoo Finance"}: ${historyCount} pregões (até 1 ano); Yahoo: ${newsCount} notícias e ${eventsCount} eventos novos; ${viaOplabOpcoes ? "OpLab" : "opcoes.net.br"}: ${optionsCount} cotações salvas, até 3 vencimentos. ${warnings.join("; ")}`;
+    if (coletaValidada) try {
+      const { atualizarCarteira } = await import("./carteira.server");
+      const c = await atualizarCarteira(db, ticker);
+      carteiraNota = ` Carteira: ${c.atualizadas} operação(ões) atualizada(s)${c.parciais ? `, ${c.parciais} com cotação incompleta preservada` : ""}.`;
+    } catch (error) { warnings.push(`Carteira: ${error instanceof Error ? error.message : "falha na atualização"}`); }
+    const notes = `${liquidadosNota}${motorNota}${carteiraNota} ${viaOplabPrecos ? "OpLab" : "Yahoo Finance"}: ${historyCount} pregões (até 1 ano); Yahoo: ${newsCount} notícias e ${eventsCount} eventos novos; ${viaOplabOpcoes ? "OpLab" : "opcoes.net.br"}: ${optionsCount} cotações salvas, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
     return { ticker, signalsCount, historyCount, optionsCount, newsCount, eventsCount, warnings, notes, schedule, retry: finishData?.retry ?? false, circuit: finishData?.circuit ?? false, nextAt: finishData?.until };

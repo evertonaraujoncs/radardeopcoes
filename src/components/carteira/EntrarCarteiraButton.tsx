@@ -24,7 +24,7 @@ export function EntrarCarteiraButton({ sinalId }: { sinalId: number }) {
     }
   }
 
-  return <Button type="button" className="w-full" onClick={handleClick} disabled={salvando} aria-label="Entrar e abrir a carteira">
+  return <Button type="button" className="w-full" onClick={handleClick} disabled={salvando}>
     {salvando ? <LoaderCircle className="animate-spin" /> : <LogIn />}{salvando ? "Registrando…" : "Entrar"}
   </Button>;
 }
