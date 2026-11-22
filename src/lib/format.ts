@@ -47,6 +47,7 @@ export const RISCOS: Record<string, string> = {
   dividendo_antes_vencimento: "Dividendo antes do vencimento",
   balanco_antes_vencimento: "Balanço antes do vencimento",
   preco_sem_bid_ask: "Preço sem bid/ask",
+  cotacao_defasada: "Cotações com mais de 1 pregão de defasagem",
   spread_largo: "Spread largo",
 };
 export const nomeRisco = (k: string) => RISCOS[k] ?? k.replace(/_/g, " ");
