@@ -3,13 +3,11 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigirAdmin } from "./admin";
 import { liquidarVencidos } from "./settlement";
+import { apagarSinaisInvalidos } from "./signal-maintenance";
+import { alinharCotacoes } from "./alinhamento";
 import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
-import { hvMetricas } from "./hv";
-import { coletarOplab } from "./oplab-collect";
-import { oplabConfigurado } from "./oplab";
-import { analisarTecnica, candlesDe } from "./tecnica";
-import { gerarSinais, calcularAlertas, ivMetricas, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
+import { gerarSinais, calcularAlertas, ivRankSerie, selecionarIvRank, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
 
 const DEFASAGEM_DIAS = 4;
 
@@ -37,8 +35,8 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   const hoje = new Date(`${hojeStr}T00:00:00Z`);
   const desde = new Date(hoje.getTime() - DEFASAGEM_DIAS * 86400000).toISOString();
   const [ativo, grade, par, fund, divs, evs, news, hist, cdi] = await Promise.all([
-    db.from("ativos").select("preco,historico_precos,iv_rank_1y,iv_percentil_1y,iv_atualizado_em").eq("ticker", ticker).maybeSingle(),
-    db.from("opcoes_grade").select("ticker,tipo,strike,vencimento,bid,ask,ultimo,negocios,iv,delta,data_coleta").eq("ativo_base", ticker).gte("data_coleta", desde).limit(5000),
+    db.from("ativos").select("preco,historico_precos,iv_rank_1y,iv_atualizado_em").eq("ticker", ticker).maybeSingle(),
+    db.from("opcoes_grade").select("ticker,tipo,strike,vencimento,bid,ask,ultimo,negocios,iv,delta,data_coleta").eq("ativo_base", ticker).gte("data_coleta", desde).order("data_coleta", { ascending: false }).limit(5000),
     userDb.from("parametros").select("*").order("updated_at", { ascending: false }).limit(1),
     db.from("fundamentos").select("dy,valuation_score").eq("ticker", ticker).order("data", { ascending: false }).limit(1),
     db.from("dividendos").select("data_com").eq("ticker", ticker).gte("data_com", hojeStr),
@@ -48,15 +46,12 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     obterCdi(),
   ]);
   for (const r of [ativo, grade, fund, divs, evs, news, hist]) if (r.error) throw new Error(r.error.message);
-  const S0 = num(ativo.data?.preco);
-  if (!S0) throw new Error("sem preço do ativo");
-  // Mantém a cotação mais recente de cada opção dentro da janela de defasagem.
-  const ultimas = new Map<string, LinhaGrade>();
-  for (const row of (grade.data ?? []) as LinhaGrade[]) {
-    const prev = ultimas.get(row.ticker);
-    if (!prev || row.data_coleta > prev.data_coleta) ultimas.set(row.ticker, row);
-  }
-  if (!ultimas.size) throw new Error(`sem grade de opções negociada nos últimos ${DEFASAGEM_DIAS} dias`);
+  // Datas alinhadas: só entram opções negociadas no mesmo pregão (o mais recente), precificadas com o fechamento do ativo daquele pregão.
+  const alinh = alinharCotacoes((grade.data ?? []) as LinhaGrade[], ativo.data?.historico_precos, num(ativo.data?.preco), hojeStr);
+  if (!alinh.linhas.length) throw new Error(alinh.avisos[0] ?? `sem grade de opções negociada nos últimos ${DEFASAGEM_DIAS} dias`);
+  if (!alinh.spot) throw new Error(alinh.avisos[0] ?? "sem preço do ativo");
+  const S0 = alinh.spot;
+  const hojeRef = new Date(`${alinh.dataRef}T00:00:00Z`);
   const params: Params = { ...PARAMS_PADRAO };
   const p0 = par.data?.[0];
   if (p0) {
@@ -67,52 +62,42 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     params.prob_lucro_min = Number(p0.prob_lucro_min ?? params.prob_lucro_min);
     if (Array.isArray(p0.estrategias_ativas)) params.estrategias_ativas = (p0.estrategias_ativas as string[]).filter((k): k is EstrategiaKey => k in ESTRATEGIAS);
   }
-  // Método: leitura técnica do ATIVO (tendência, suporte/resistência) e IV Rank/Percentil de pelo menos 60 pregões.
-  const candles = candlesDe(ativo.data?.historico_precos);
-  const tecnica = analisarTecnica(candles);
-  // IV Rank real quando há 60+ pregões de IV; antes disso, HV Rank/Percentil do ativo (1 ano de preços) como substituto, sinalizado nos sinais.
-  const ivReal = ivMetricas(hist.data ?? []);
-  // IV Rank/Percentil oficiais da OpLab, se coletados nos últimos 3 dias, têm prioridade.
-  const op = ativo.data as { iv_rank_1y?: number | null; iv_percentil_1y?: number | null; iv_atualizado_em?: string | null } | null;
-  const oplab = op?.iv_rank_1y != null && op?.iv_percentil_1y != null && op?.iv_atualizado_em && Date.now() - Date.parse(op.iv_atualizado_em) < 3 * 86400000
-    ? { rank: Number(op.iv_rank_1y), percentil: Number(op.iv_percentil_1y), dias: 252 } : null;
-  const hv = ivReal || oplab ? null : hvMetricas(candles);
-  const iv = oplab ?? ivReal ?? hv;
   const dy = num(fund.data?.[0]?.dy);
   const sents = ((news.data ?? []) as { sentimento: unknown }[]).map(n => num(n.sentimento)).filter((x): x is number => x !== null);
+  const iv = selecionarIvRank(ativo.data, ivRankSerie(hist.data ?? []));
   const ctx: Ctx = {
     q: dy === null ? 0 : dy > 1 ? dy / 100 : dy,
     valuation_score: num(fund.data?.[0]?.valuation_score),
     sentimento: sents.length ? sents.reduce((a, b) => a + b, 0) / sents.length : null,
     datas_com: ((divs.data ?? []) as { data_com: string }[]).map(d => new Date(`${d.data_com}T00:00:00Z`)),
     datas_balanco: ((evs.data ?? []) as { data: string; tipo: string }[]).filter(e => ["balanco", "resultados"].includes(e.tipo)).map(e => new Date(`${e.data}T00:00:00Z`)),
-    ivr: iv?.rank ?? null,
-    ivp: iv?.percentil ?? null,
-    ivFonte: oplab ? "oplab" : ivReal ? "iv" : hv ? "hv" : null,
-    tecnica,
+    ivr: iv.rank,
   };
   const r = Math.log(1 + cdi.cdi);
-  const sinais = await gerarSinais(ticker, S0, [...ultimas.values()], ctx, params, hoje, r);
+  const sinais = await gerarSinais(ticker, S0, alinh.linhas, ctx, params, hojeRef, r);
+  const [, mesRef, diaRef] = alinh.dataRef.split("-");
+  for (const sinal of sinais) {
+    sinal.motivos.push(`Cotações do pregão de ${diaRef}/${mesRef}, com o fechamento do ativo no mesmo dia`);
+    if (alinh.pregoesDefasagem > 1) sinal.riscos.push("cotacao_defasada");
+  }
+  if (iv.fonte === "oplab") for (const sinal of sinais) sinal.motivos.push("IV Rank de um ano fornecido pela OpLab");
 
   const agora = new Date().toISOString();
   const ex = await db.from("sinais").select("id,chave,score,ticker,estrategia").eq("status", "ativo").eq("ticker", ticker).gte("vencimento", hojeStr);
   if (ex.error) throw new Error(ex.error.message);
   const existentes = new Map<string, { id: number; score: number | null; ticker: string; estrategia: string }>((ex.data ?? []).map((e: { chave: string; id: number; score: number | null; ticker: string; estrategia: string }) => [e.chave, e]));
   const novos = new Map(sinais.map(s => [s.chave, s]));
-  const { alertas, encerrar } = calcularAlertas(existentes, novos);
+  const { alertas, remover } = calcularAlertas(existentes, novos);
   const ids = new Map<string, number>([...existentes].map(([k, e]) => [k, e.id]));
   if (sinais.length) {
-    const rows = sinais.map(s => ({ chave: s.chave, ticker: s.ticker, estrategia: s.estrategia, vencimento: s.vencimento, pernas: s.pernas, dias_vencimento: s.dias_vencimento, preco_ativo: s.preco_ativo, credito_debito: s.credito_debito, lucro_max: s.lucro_max, perda_max: s.perda_max, breakevens: s.breakevens, prob_lucro: s.prob_lucro, valor_esperado: s.valor_esperado, retorno_sobre_risco: s.retorno_sobre_risco, iv_rank: s.iv_rank, score: s.score, fatores: s.fatores, gregas: s.gregas, curva_payoff: s.curva_payoff, motivos: s.motivos, riscos: s.riscos, plano: s.plano, status: "ativo", atualizado_em: agora }));
+    const rows = sinais.map(s => ({ chave: s.chave, ticker: s.ticker, estrategia: s.estrategia, vencimento: s.vencimento, pernas: s.pernas, dias_vencimento: s.dias_vencimento, preco_ativo: s.preco_ativo, credito_debito: s.credito_debito, lucro_max: s.lucro_max, perda_max: s.perda_max, breakevens: s.breakevens, prob_lucro: s.prob_lucro, valor_esperado: s.valor_esperado, retorno_sobre_risco: s.retorno_sobre_risco, iv_rank: s.iv_rank, score: s.score, fatores: s.fatores, gregas: s.gregas, curva_payoff: s.curva_payoff, motivos: s.motivos, riscos: s.riscos, status: "ativo", atualizado_em: agora }));
     const up = await db.from("sinais").upsert(rows, { onConflict: "chave" }).select("id,chave");
     if (up.error) throw new Error(up.error.message);
     for (const row of up.data ?? []) ids.set(row.chave, row.id);
     const h = await db.from("sinais_historico").insert(sinais.filter(s => ids.has(s.chave)).map(s => ({ sinal_id: ids.get(s.chave), score: s.score, prob_lucro: s.prob_lucro, preco_ativo: s.preco_ativo })));
     if (h.error) throw new Error(h.error.message);
   }
-  if (encerrar.length) {
-    const e = await db.from("sinais").update({ status: "encerrado", motivo_encerramento: "deixou_de_valer", encerrado_em: agora, atualizado_em: agora }).eq("status", "ativo").in("chave", encerrar);
-    if (e.error) throw new Error(e.error.message);
-  }
+  const removidos = await apagarSinaisInvalidos(db, remover);
   const feitos = await db.from("alertas").select("sinal_id,tipo").gte("criado_em", `${hojeStr}T00:00:00`);
   const ja = new Set(((feitos.data ?? []) as { sinal_id: number; tipo: string }[]).map(a => `${a.sinal_id}:${a.tipo}`));
   const novosAlertas = alertas.filter(a => ids.has(a.chave) && !ja.has(`${ids.get(a.chave)}:${a.tipo}`)).map(a => ({ sinal_id: ids.get(a.chave), tipo: a.tipo, mensagem: a.mensagem }));
@@ -120,7 +105,7 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     const a = await db.from("alertas").insert(novosAlertas);
     if (a.error) throw new Error(a.error.message);
   }
-  return { sinais: sinais.length, encerrados: encerrar.length, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), tendencia: tecnica?.tendencia ?? null, ivDias: iv?.dias ?? null, ivFonte: oplab ? "oplab" : ivReal ? "iv" : hv ? "hv" : null };
+  return { sinais: sinais.length, removidos, alertas: novosAlertas.length, cdi: cdi.cdi, cdiEstimado: cdi.estimado, semBidAsk: sinais.some(s => s.riscos.includes("preco_sem_bid_ask")), ivFonte: iv.fonte };
 }
 
 async function optionCatalog() {
@@ -212,15 +197,18 @@ export const collectMarket = createServerFn({ method: "POST" })
       if (!response.ok) throw new Error(`Fonte retornou HTTP ${response.status}`);
       return response.json();
     };
-    // Fonte preferida: OpLab (bid/ask reais e IV Rank oficial). Sem token ou em caso de falha, valem Yahoo (preços) e opcoes.net.br (opções).
     let viaOplabPrecos = false, viaOplabOpcoes = false;
-    if (oplabConfigurado()) {
+    const oplabToken = process.env["OPLAB_ACCESS_TOKEN"];
+    if (oplabToken) {
+      const { coletarOplab } = await import("./oplab-collect.server");
       try {
-        const o = await coletarOplab(db, ticker, { optionsOnly: !!data.optionsOnly });
-        historyCount += o.historyCount; optionsCount += o.optionsCount; validatedQuotes += o.cotacoes;
-        viaOplabPrecos = o.precos; viaOplabOpcoes = o.opcoes; warnings.push(...o.warnings);
-      } catch (error) { warnings.push(`OpLab: ${error instanceof Error ? error.message : "falha na coleta"}`); }
-    }
+        const collected = await coletarOplab(db, ticker, oplabToken, !!data.optionsOnly);
+        viaOplabPrecos = collected.precos; viaOplabOpcoes = collected.opcoes;
+        historyCount = collected.historyCount; optionsCount = collected.optionsCount;
+        warnings.push(...collected.warnings);
+        blocked = collected.blocked; retrySeconds = collected.retrySeconds;
+      } catch { warnings.push("OpLab: falha na coleta; usando Yahoo/Opções.net."); }
+    } else warnings.push("OpLab não configurada; usando Yahoo/Opções.net.");
     try { if (!data.optionsOnly && !viaOplabPrecos) {
       const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}.SA?range=1y&interval=1d`;
       const payload = await json(url);
@@ -233,8 +221,8 @@ export const collectMarket = createServerFn({ method: "POST" })
       historyCount = history.length;
     }
     } catch (error) { warnings.push(`Cotações: ${error instanceof Error ? error.message : "falha na coleta"}`); }
-    if (viaOplabOpcoes) { outcome = "success"; } else {
-    try {
+    if (viaOplabOpcoes) { outcome = "success"; blocked = false; }
+    else try {
       const query = new URLSearchParams({ r0t: "LastQuotesInfo", r1t: "OptionsChain", "r1p.underlying_asset_id": ticker, "r1p.skip": "0", "r1p.load": "8", "r1p.columns_info": "true", "r1p.underlying_quotes": "true" });
       const payload = await optionsJson(`https://opcoes.net.br/api/v1?${query}`);
       const allRows = parseProviderChain(payload, ticker, now);
@@ -260,10 +248,9 @@ export const collectMarket = createServerFn({ method: "POST" })
       }
       if (!selected.length) warnings.push("Opções: sem vencimentos retornados pela fonte.");
       if (allRows.some(row => row.bid === null || row.ask === null)) warnings.push("Ofertas: bid/ask não disponibilizados no acesso público de fechamento do Opções.net; gregas disponíveis são salvas, preços do motor sem ofertas continuam estimados.");
-      if (validatedQuotes) outcome = "success";
+      if (validatedQuotes) { outcome = "success"; blocked = false; }
       else warnings.push("Opções: a grade não contém cotações com data de negócio confirmada; dados e sinais existentes preservados.");
     } catch (error) { warnings.push(`Opções: ${error instanceof Error ? error.message : "falha na coleta"}`); }
-    }
     const finished = await db.rpc("finish_options_collection", { p_ticker: ticker, p_token: token, p_outcome: blocked ? "blocked" : outcome, p_retry_seconds: retrySeconds });
     if (finished.error) throw new Error("Não foi possível registrar a pausa da coleta; aguarde cinco minutos antes de tentar novamente.");
     const finishData = finished.data as { until?: string; retry?: boolean; circuit?: boolean } | null;
@@ -296,20 +283,27 @@ export const collectMarket = createServerFn({ method: "POST" })
     let signalsCount = 0;
     let motorNota = "";
     let liquidadosNota = "";
+    let carteiraNota = "";
+    const coletaValidada = canRecalculateSignals(blocked, outcome);
     try {
       const l = await liquidarVencidos(db, { ticker });
       if (l.liquidados) liquidadosNota = `${l.liquidados} sinal(is) vencido(s) liquidado(s) com o fechamento do vencimento. `;
       if (l.pendentes) warnings.push(`${l.pendentes} sinal(is) vencido(s) aguardando o preço de fechamento do vencimento`);
     } catch (error) { warnings.push(`Liquidação de vencimentos: ${error instanceof Error ? error.message : "falha"}`); }
-    try { if (canRecalculateSignals(blocked, outcome)) {
+    try { if (coletaValidada) {
       const m = await rodarMotor(db, context.supabase, ticker);
       signalsCount = m.sinais;
-      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.encerrados} encerrados, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""})${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
+      motorNota = `Motor de sinais: ${m.sinais} sinais ativos, ${m.removidos} removidos por perda de validade, ${m.alertas} alertas (CDI ${(m.cdi * 100).toFixed(2)}%${m.cdiEstimado ? " estimado — Banco Central indisponível" : ""}); IV Rank: ${m.ivFonte === "oplab" ? "OpLab, um ano" : "histórico disponível"}${m.semBidAsk ? "; preços sem bid/ask usam último negócio com margem de 5%" : ""}.`;
     } else {
-      motorNota = "Motor preservado: sinais existentes não foram recalculados ou encerrados sem uma grade validada nesta coleta.";
+      motorNota = "Motor preservado: sinais existentes não foram recalculados ou removidos sem uma grade validada nesta coleta.";
     }
     } catch (error) { warnings.push(`Motor de sinais: ${error instanceof Error ? error.message : "falha no cálculo"}`); }
-    const notes = `${liquidadosNota}${motorNota} ${viaOplabPrecos ? "OpLab" : "Yahoo Finance"}: ${historyCount} pregões (até 1 ano), ${newsCount} notícias e ${eventsCount} eventos novos; ${viaOplabOpcoes ? "OpLab" : "opcoes.net.br"}: ${optionsCount} cotações, até 3 vencimentos. ${warnings.join("; ")}`;
+    if (coletaValidada) try {
+      const { atualizarCarteira } = await import("./carteira.server");
+      const c = await atualizarCarteira(db, ticker);
+      carteiraNota = ` Carteira: ${c.atualizadas} operação(ões) atualizada(s)${c.parciais ? `, ${c.parciais} com cotação incompleta preservada` : ""}.`;
+    } catch (error) { warnings.push(`Carteira: ${error instanceof Error ? error.message : "falha na atualização"}`); }
+    const notes = `${liquidadosNota}${motorNota}${carteiraNota} ${viaOplabPrecos ? "OpLab" : "Yahoo Finance"}: ${historyCount} pregões (até 1 ano); Yahoo: ${newsCount} notícias e ${eventsCount} eventos novos; ${viaOplabOpcoes ? "OpLab" : "opcoes.net.br"}: ${optionsCount} cotações salvas, até 3 vencimentos. ${warnings.join("; ")}`;
     const { error } = await db.from("scraper_status").insert({ ativo: ticker, executado_em: now, linhas: historyCount + optionsCount + newsCount + eventsCount, status: warnings.length ? "AVISO" : "OK", notas: notes });
     if (error) throw new Error("Não foi possível registrar o resultado da coleta.");
     return { ticker, signalsCount, historyCount, optionsCount, newsCount, eventsCount, warnings, notes, schedule, retry: finishData?.retry ?? false, circuit: finishData?.circuit ?? false, nextAt: finishData?.until };

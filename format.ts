@@ -29,48 +29,36 @@ export const desatualizado = (v: string | null | undefined, agora = Date.now()) 
 export const corValor = (v: number | null | undefined) =>
   v == null || Number(v) === 0 ? "text-foreground" : Number(v) > 0 ? "text-gain" : "text-loss";
 
-/** Estratégias do método, selecionáveis nos Parâmetros. */
 export const ESTRATEGIAS: Record<string, string> = {
   compra_call: "Compra de call a seco",
   venda_put: "Venda de put garantida",
   lancamento_coberto: "Lançamento coberto",
-  collar: "Collar de alta",
-  collar_baixa: "Collar de baixa",
+  collar: "Collar",
+  trava_alta_put: "Trava de alta com puts",
+  trava_baixa_call: "Trava de baixa com calls",
   trava_alta_call: "Trava de alta com calls",
   trava_baixa_put: "Trava de baixa com puts",
-  condor_call: "Condor de calls",
+  iron_condor: "Iron condor",
 };
-/** Estratégias de crédito do motor antigo: o método as proíbe; só aparecem em sinais históricos. */
-const ESTRATEGIAS_LEGADAS: Record<string, string> = {
-  trava_alta_put: "Trava de alta com puts (crédito)",
-  trava_baixa_call: "Trava de baixa com calls (crédito)",
-  iron_condor: "Iron condor (crédito)",
-};
-export const nomeEstrategia = (k: string) => ESTRATEGIAS[k] ?? ESTRATEGIAS_LEGADAS[k] ?? k.replace(/_/g, " ");
+export const nomeEstrategia = (k: string) => ESTRATEGIAS[k] ?? k.replace(/_/g, " ");
 
 export const RISCOS: Record<string, string> = {
   perda_total_premio: "Pode perder todo o prêmio pago",
   dividendo_antes_vencimento: "Dividendo antes do vencimento",
   balanco_antes_vencimento: "Balanço antes do vencimento",
-  preco_sem_bid_ask: "Preço sem bid/ask (não validado)",
-  iv_sem_historico: "IV Rank/Percentil indisponíveis (não validado)",
-  tecnica_indisponivel: "Análise técnica indisponível (não validado)",
-  iv_por_hv: "IV Rank estimado pela volatilidade histórica",
+  preco_sem_bid_ask: "Preço sem bid/ask",
+  cotacao_defasada: "Cotações com mais de 1 pregão de defasagem",
   spread_largo: "Spread largo",
 };
-/** Riscos que significam "método ainda não validou": o sinal é um pré-sinal e não gera alerta. */
-export const PENDENCIAS = ["iv_sem_historico", "tecnica_indisponivel", "preco_sem_bid_ask"];
-export const ehPreSinal = (riscos: unknown) => Array.isArray(riscos) && riscos.some((r) => PENDENCIAS.includes(String(r)));
 export const nomeRisco = (k: string) => RISCOS[k] ?? k.replace(/_/g, " ");
 
 export const FATORES: Record<string, { nome: string; peso: number }> = {
+  prob_lucro: { nome: "Probabilidade de lucro", peso: 30 },
   retorno_risco: { nome: "Retorno sobre risco", peso: 25 },
-  tecnica: { nome: "Leitura técnica do ativo", peso: 20 },
-  prob_lucro: { nome: "Probabilidade de lucro", peso: 15 },
   iv_rank: { nome: "IV Rank adequado", peso: 15 },
   liquidez: { nome: "Liquidez", peso: 10 },
+  valuation: { nome: "Valuation / fundamentos", peso: 10 },
   noticias_eventos: { nome: "Notícias e eventos", peso: 10 },
-  valuation: { nome: "Valuation / fundamentos", peso: 5 },
 };
 
 export type Perna = { tipo: string; ticker: string; strike: number | null; lado: number; qtd: number; preco: number; iv?: number | null };
