@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { exigirAdmin } from "./admin";
 import { liquidarVencidos } from "./settlement";
 import { apagarSinaisInvalidos } from "./signal-maintenance";
+import { alinharCotacoes } from "./alinhamento";
 import { parseProviderChain, parseOptionTickers, parseYahooNews, parseYahooEvents, rankLiquidTargets } from "./market-data";
 import { providerBlocked, retryAfterSeconds, readSchedule, canRecalculateSignals } from "./collection-policy";
 import { gerarSinais, calcularAlertas, ivRankSerie, selecionarIvRank, num, PARAMS_PADRAO, ESTRATEGIAS, type Ctx, type LinhaGrade, type Params, type EstrategiaKey } from "./signal-engine";
@@ -34,8 +35,8 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
   const hoje = new Date(`${hojeStr}T00:00:00Z`);
   const desde = new Date(hoje.getTime() - DEFASAGEM_DIAS * 86400000).toISOString();
   const [ativo, grade, par, fund, divs, evs, news, hist, cdi] = await Promise.all([
-    db.from("ativos").select("preco,iv_rank_1y,iv_atualizado_em").eq("ticker", ticker).maybeSingle(),
-    db.from("opcoes_grade").select("ticker,tipo,strike,vencimento,bid,ask,ultimo,negocios,iv,delta,data_coleta").eq("ativo_base", ticker).gte("data_coleta", desde).limit(5000),
+    db.from("ativos").select("preco,historico_precos,iv_rank_1y,iv_atualizado_em").eq("ticker", ticker).maybeSingle(),
+    db.from("opcoes_grade").select("ticker,tipo,strike,vencimento,bid,ask,ultimo,negocios,iv,delta,data_coleta").eq("ativo_base", ticker).gte("data_coleta", desde).order("data_coleta", { ascending: false }).limit(5000),
     userDb.from("parametros").select("*").order("updated_at", { ascending: false }).limit(1),
     db.from("fundamentos").select("dy,valuation_score").eq("ticker", ticker).order("data", { ascending: false }).limit(1),
     db.from("dividendos").select("data_com").eq("ticker", ticker).gte("data_com", hojeStr),
@@ -45,15 +46,12 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     obterCdi(),
   ]);
   for (const r of [ativo, grade, fund, divs, evs, news, hist]) if (r.error) throw new Error(r.error.message);
-  const S0 = num(ativo.data?.preco);
-  if (!S0) throw new Error("sem preço do ativo");
-  // Mantém a cotação mais recente de cada opção dentro da janela de defasagem.
-  const ultimas = new Map<string, LinhaGrade>();
-  for (const row of (grade.data ?? []) as LinhaGrade[]) {
-    const prev = ultimas.get(row.ticker);
-    if (!prev || row.data_coleta > prev.data_coleta) ultimas.set(row.ticker, row);
-  }
-  if (!ultimas.size) throw new Error(`sem grade de opções negociada nos últimos ${DEFASAGEM_DIAS} dias`);
+  // Datas alinhadas: só entram opções negociadas no mesmo pregão (o mais recente), precificadas com o fechamento do ativo daquele pregão.
+  const alinh = alinharCotacoes((grade.data ?? []) as LinhaGrade[], ativo.data?.historico_precos, num(ativo.data?.preco), hojeStr);
+  if (!alinh.linhas.length) throw new Error(alinh.avisos[0] ?? `sem grade de opções negociada nos últimos ${DEFASAGEM_DIAS} dias`);
+  if (!alinh.spot) throw new Error(alinh.avisos[0] ?? "sem preço do ativo");
+  const S0 = alinh.spot;
+  const hojeRef = new Date(`${alinh.dataRef}T00:00:00Z`);
   const params: Params = { ...PARAMS_PADRAO };
   const p0 = par.data?.[0];
   if (p0) {
@@ -76,7 +74,12 @@ async function rodarMotor(db: any, userDb: any, ticker: string) {
     ivr: iv.rank,
   };
   const r = Math.log(1 + cdi.cdi);
-  const sinais = await gerarSinais(ticker, S0, [...ultimas.values()], ctx, params, hoje, r);
+  const sinais = await gerarSinais(ticker, S0, alinh.linhas, ctx, params, hojeRef, r);
+  const [, mesRef, diaRef] = alinh.dataRef.split("-");
+  for (const sinal of sinais) {
+    sinal.motivos.push(`Cotações do pregão de ${diaRef}/${mesRef}, com o fechamento do ativo no mesmo dia`);
+    if (alinh.pregoesDefasagem > 1) sinal.riscos.push("cotacao_defasada");
+  }
   if (iv.fonte === "oplab") for (const sinal of sinais) sinal.motivos.push("IV Rank de um ano fornecido pela OpLab");
 
   const agora = new Date().toISOString();
